@@ -1,0 +1,1326 @@
+;Program: Trace_IAMG.nlogo
+;Created by: Eric A. de Kemp   January 3, 2017
+;Modifications
+;   Curvature triming for user specified curve conditions April 23, 2019
+;   Interpolation method added for IDW Eric de Kemp  January 3, 2017
+;   Distance calculations reject out-of world agents
+;
+;
+;References:
+;            See original code from Erics Models_2013\Observation_Trace_3D.nlogo.nlogo3d
+;            3D form line construction by structural field interpolation (SFI) of geologic strike and dip observations,
+;            Mike Hillier, Eric deKemp and Ernst Schetselaar, Journal of Structural Geology 51 (2013) p. 167-179.
+;            Any references used for particular functions are listed in the
+;            header for that function.
+;
+;Description: A simple agent based dip and down dip trace demo. Similar to Structural Field Interpolation (SFI)
+;Notes:
+;Instructions:
+; 1) Set any sliders or input buttons as desired.
+;    *** for a nice demo, use the following parameters:
+;
+;        Paths 1
+;        Scouts 1
+;        target 1000
+;        observations 5
+;        smoothness .5
+;        Lengthscale 5
+;        Density 8
+;        Max Length 500
+;        Curvature .1
+;        strike 45
+;        dip 45
+;        variability .5
+;
+; 2) Select the "Setup" button.
+; 3) Select the "Launch" button.
+; 4) When ready for the simulation to end, select the "Stop" button.
+
+; Development needed :
+;
+; Extend Bezier - de Casteljau algorith to respect last end point of streamline.
+; Make possible freezing input data configuration and running other simulations....
+; Implement topology so input has tops and estimation has tops and simualtion respects tops, not implemented.
+; Need new vector graphics for tops. Not implmented.
+
+
+extensions [array]
+
+; No polarity as of yet
+
+
+; Declare the global variables
+globals [  CID PN PN2 PN3 simstrike simdip dipdir offset Num_Estimates fly dist counter Alpha Beta Gamma All_strikes All_dips
+          Active_curvature grip_id i n X0 X1 Y0 Y1 Z0 Z1 SPx SPy SPz px py pz l]
+
+
+
+; Make the main agents
+breed [data structure]
+breed [interpretations site]
+breed [seedlines seedline]
+breed [streampoints streampoint]
+breed [searchers sniffer]
+breed [curve vertex]
+
+; Set the agent properties
+patches-own [ estimated  pdist2data samples pstrike pdip ]
+data-own [ id confidance data_strike data_dip ]
+interpretations-own [dist2data]
+seedlines-own [dist2estimate streamed]
+streampoints-own [inworld lastdist processed bezpointid node_ID]
+curve-own [Curve_ID Vertex_ID Arc_Length Curv] ; as defined by Adamuszek et al. 2001  Journal of Structural Geology 33, p. 1406-1416
+
+to setup  ; an observer based setup
+  ;; (for this model to work with NetLogo's new plotting features,
+  ;; __clear-all-and-reset-ticks should be replaced with clear-all at
+  ;; the beginning of your setup procedure and reset-ticks at the end
+  ;; of the procedure.)
+  __clear-all-and-reset-ticks
+  set Num_Estimates 0
+  set counter 0
+  set grip_id 0
+  ;set grip []
+  set SPx []
+  set SPy []
+  set SPz []
+  set PN 0
+  set PN2 0
+  set PN3 0
+  set CID 1
+  set n 0
+  set l 1
+  set Active_curvature 0
+  orbit-down 45
+  orbit-left 45
+  set fly (Length_Scale * ((max-pxcor - min-pxcor)  / 100))
+
+  ; Create Observation set
+  ; Start with randomly distributed and randomly oriented
+  create-ordered-data observations [set shape "tablet" set color yellow set size 10 setxyz random-xcor random-ycor 12.5]
+  ask data [set id random observations]
+  ask data [set confidance 1 ]
+
+  simulate-data observations
+
+
+
+  create-searchers scouts [pen-up  ht]
+  ask searchers [ pen-up setxyz random-xcor random-ycor random-zcor set color 45 set size 2]
+  create-seedlines seeds [pen-up set streamed 0 set shape "circle" set size 2 setxyz random-xcor random-ycor random-zcor set color red ]
+  reset-ticks
+end
+
+
+to simulate-data [num]
+  ; Convert SEED strike and dip (could be bettter with quaternions )
+  ; Convert SEED strike and dip to dip direction before anything else
+  ; No need to use radians here, needs quaternion implementation to accomodate
+  ; spherical rotations
+
+  ifelse (strike <= 270) [set dipdir strike + 90] [set dipdir strike - 270 ]
+  ; Calculate down dip direction cosines. Note that these are diferent then the normals
+  set Alpha ((cos dip) * (sin dipdir))
+  set Beta ((cos dip) * (cos dipdir))
+  set Gamma ((sin dip) * 1)
+
+  ; Loop through the data loader
+  let datanum 0
+  while [datanum <= num] [
+     ; Fabric simulation
+
+  ; Simulate random orientations with SEED direction cosines Alpha,Beta,Gamma
+  Set Alpha Alpha + ((1.0 - random-float 2.0) * variability)
+  Set Beta Beta + ((1.0 - random-float 2.0) * variability)
+  Set Gamma Gamma + ((1.0 - random-float 2.0) * variability)
+
+
+
+
+  ; Normalize to a unit vector
+  let vn 0
+  set vn sqrt ((Alpha ^ 2) + (Beta ^ 2) + (Gamma ^ 2))
+  set Alpha (Alpha / vn)
+  set Beta (Beta / vn )
+  set Gamma (Gamma / vn )
+
+  ;Convert back to Dip Direction
+  ifelse (Alpha = 0)[
+    if (Beta >= 0) [ set dipdir 0  ]
+    if (Beta < 0)  [ set dipdir 180]
+       ]
+  [ set dipdir (atan Alpha Beta)]
+  set simdip (90 - acos(Gamma) )
+
+  ;Convert from Dip Direction to Strike right hand rule
+  if (dipdir >= 90) [set simstrike (dipdir - 90) ]
+  if (dipdir < 90)  [set simstrike (dipdir + 270)]
+
+  ask data with [id = datanum] [set data_strike simstrike set data_dip simdip set heading simstrike - 90 set pitch simdip ]
+  ; initialize the patch values for strike and dip with variability at colocated points
+  ask data with [id = datanum ][ask patch-here [set estimated 1 set pdist2data 0 set pstrike simstrike set pdip simdip ]]
+  set datanum datanum + 1
+
+
+]
+
+end
+
+
+
+;;;;;;;;;;;;;  Active part of simulation
+
+
+to go  ; an agent based proceedure
+
+
+
+
+  ; stop when iterations hits that target count
+  if ticks >= target [ stop ]
+
+  sniff
+
+  ask seedlines [propagate]
+
+
+
+  trim_down
+  set counter counter + 1
+  tick
+ do-plot
+
+end
+
+to Reset
+  reset-ticks
+  ask streampoints [die]
+  ask curve [die]
+
+end
+
+;;;;;;;;;;;;;  Active part of simulation
+
+
+to sniff
+  ; set the sniffers on a random search mission
+
+  ask searchers [pen-up setxyz random-xcor random-ycor random-zcor]
+  ask searchers [set heading random 360 set pitch random 90 forward fly]
+  ; Check if patch is estimated
+
+  ask searchers [set pdist2data distance patch-here]
+
+
+  ;set-current-plot "Proximity"
+  ;set-current-plot-pen "distance"
+  ;ask patches with [estimated = 1] [ plot pdist2data ]
+
+
+
+
+  ;; Now you can used distance weighted controls
+
+  ; Pick an interpolation method
+  if (Method = "Nearest neighbour") [
+      ask searchers [ ask patch-here [if (estimated = 0) [ proximal-estimate ]]]
+      ask searchers [ ask patch-here [if (estimated = 1) [reproduce 1 pstrike pdip ]]]
+  ]
+
+  ; if not then do a nearest neighbour search for observational data and grab the geometric properties
+
+
+end
+
+
+; Do a nearest neighbour check and pass on geometic values to the patch
+; AND make a new interpretive symbolized point
+to proximal-estimate
+
+   ;find the data point closest to this patch
+   let nearest min-one-of data [distance myself]
+
+   ; copy that data points strike and dip value to my searcher location
+   ; at the local patch
+
+
+   ;burn in strike and dip estimates
+   set pstrike [data_strike] of nearest
+   set pdip [data_dip] of nearest
+
+
+   set estimated 1
+   ;show pstrike show pdip show estimated
+
+
+end
+
+; New interpretive points placed at the sniffer agent locations
+to reproduce [num rstrike rdip]
+
+  ; make a new interpretive symbol with that value.
+  ifelse (Estimated_Points)
+       [
+       sprout-interpretations num [pen-down setxyz pxcor pycor pzcor set shape "tablet" set color green set size 3 set heading rstrike - 90 set pitch rdip show-turtle ]
+       ]
+       [
+       sprout-interpretations num [pen-down setxyz pxcor pycor pzcor set shape "tablet" set color green set size 3 set heading rstrike - 90 set pitch rdip hide-turtle ]
+       ]
+
+  set Num_Estimates Num_Estimates + num
+end
+
+
+
+to propagate
+  ; make streampoints conform generaly to the local dip field
+  ; find local estimated patch turn towards the down dip vector and move ahead, note no polarity implemented yet
+
+
+  let x 0
+  let y 0
+  let z 0
+
+
+     let closest min-one-of interpretations [distance myself]
+     set dist2estimate distance closest
+     set-current-plot "Proximity"
+     set-current-plot-pen "distance"
+     plot dist2estimate
+     set x precision xcor 2
+     set y precision ycor 2
+     set z precision zcor 2
+     set dist 0
+     set X0 0
+     set Y0 0
+     set Z0 0
+     set X1 0
+     set Y1 0
+     set Z1 0
+
+
+
+
+  while [n <= density ]
+
+  [
+    ; Note that myself here is agentset 'seedlines' the Red dot acting as the seed of stream line
+
+
+
+
+    let stream_trend [pstrike] of closest
+    set stream_trend ( stream_trend - 90 )
+    let stream_plunge [pdip] of closest
+
+    set heading stream_trend set pitch stream_plunge
+
+    left random ((1 - smoothness ) * 180) right random ((1 - smoothness ) * 180)
+    tilt-up random ((1 - smoothness ) * 90)
+    tilt-down random ((1 - smoothness ) * 90)
+    set closest min-one-of interpretations [distance myself]
+
+
+
+        ;drop a streampoint at this location
+
+
+        ifelse (n = 0) [  hatch-streampoints 1 [ set processed 0 set bezpointid grip_id set node_ID n set inworld 1
+                             set shape "dot" set size 1 set color white ]]
+                       [  hatch-streampoints 1 [ set processed 0 set bezpointid grip_id set node_ID n set inworld 1
+                             set shape "dot" set size 1 set color blue ]
+
+
+
+        if (Node_Labels) [ask streampoints with [bezpointid = grip_id] [set label node_ID set label-color white]]
+
+
+
+        ask streampoints with [bezpointid = grip_id and node_ID = n - 1] [set X0 xcor set Y0 ycor set Z0 zcor]
+        ask streampoints with [bezpointid = grip_id and node_ID = n ] [set X1 xcor set Y1 ycor set Z1 zcor]
+
+        set dist sqrt ((X1 - X0) ^ 2 + (Y1 - Y0) ^ 2 + (Z1 - Z0) ^ 2)
+
+        ;type "grip = " type grip_id type " "
+        ;type "n = " type n - 1 type " "
+        ;type " XYZ " type X0 type " " type Y0 type " " type Z0 type " "
+        ;type "n = " type n  type " "
+        ;type " XYZ " type X1 type " " type Y1 type " " type Z1 type " "
+
+
+        ;type " Fly " type fly type "  Dist " type dist type "              "
+
+
+
+        ask streampoints with [bezpointid = grip_id and processed = 0 and node_ID = n] [set lastdist dist]
+
+        ]  ; end of ifelse
+
+  forward fly
+
+  set closest min-one-of interpretations [distance myself]
+  set heading towards closest
+  set pitch towards closest
+  set n n + 1
+
+  ] ; END of while loop
+
+      ; Kill the bad streampoints
+      let flush 0
+      ask  streampoints with [(bezpointid = grip_id) and (processed = 0)] [ if (lastdist  > fly + 1 ) [ set flush 1]]
+      if (flush = 1) [ask streampoints with [(bezpointid = grip_id) and (processed = 0)] [die]]
+
+      ; extract XYZ coordinates in preparation for Bezier curve calculation
+      ask streampoints with [(bezpointid = grip_id) and (processed = 0)] [ set inworld 1]
+
+      ; Call the curve constructor with a fix point number THEN flush the grip frame and coordinate lists
+
+
+ ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;  Working here Jan 17 , 2017  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+      ; Order the list of input points
+      let p 0
+      while [p < Density] [
+        ask streampoints with [(bezpointid = grip_id) and (processed = 0) and (node_ID = p)] [set SPx lput xcor SPx set SPy lput ycor SPy set SPz lput zcor SPz]
+
+        set p p + 1
+        ;type "Initialization of grip points... " type grip_id type " " type " Ticks " type ticks show " "
+        ]
+
+
+      ; Duplicate last point to try and deal with last node beeing missed ...
+      ;ask streampoints with [(bezpointid = grip_id) and (processed = 0) and (node_ID = Density - 1)] [set SPx lput xcor SPx set SPy lput ycor SPy set SPz lput zcor SPz set p p + 1 set CID (CID + 1)]
+
+      ask streampoints with [(bezpointid = grip_id) and (processed = 0)] [bezier-train Density SPx SPy SPz CID set CID (CID + 1) set processed 1]
+
+
+
+
+; Report and flush the agent streampoints
+;if (count streampoints > Density * 2 ) [ask streampoints [die] ]
+
+
+; Randomly reset the seed(s)
+setxyz random-xcor random-ycor random-zcor
+set heading towards closest
+set pitch towards closest
+set n 0
+set SPx [] set SPy [] set SPz []
+
+set grip_id grip_id + 1
+
+
+end
+
+
+
+to trim_down
+; Check simple shape paramiters and filter out bad shapes
+; Track the distance of vertices of new curves and add ARCLENGTH paramiter to the curve agent set
+; Put in a maximum acceptable ArcLength and kill the rest
+; defined by Adamuszek et al. 2011  Journal of Structural Geology 33, p. 1406-1416
+; The fold parameter estimation in the Fold tool box from this article would be interesting to implement for data mining of
+; real fold trains.
+
+
+if ( any? curve )[
+ask curve with [Arc_Length > Max_Length] [die]
+
+  ]
+
+; Coded out April 29, 2019
+;if ( any? curve )[
+;  type "In now !" type [Curv] of curve  type "\n"
+;  let mean_curve mean [Curv] of curve
+;  if (mean_curve > Curvature) [ ask curve [die] ]
+;  if any? curve with [ Curv > curvature] [ask curve [die] ]
+;
+;  set Active_curvature mean_curve
+;  ]
+
+end
+
+
+
+
+to bezier-train [pnum  lx ly lz Bezier_ID ]  ;; Make a linked train of the active streamlines and turn it into a bezier curve
+
+  ; drop out the first few data points into a list
+
+  let k 1
+  let t 0  ; paramiterization value from 0 to 1
+  let Degree (pnum - 1) ; degree of nested interpolation, could be paralallized
+  let Hpnts (pnum * 10) ; number of points for a output curve, essentially resolution
+  let X 0
+  let Y 0
+  let Z 0
+  let X2 0
+  let Y2 0
+  let Z2 0
+  let X3 0
+  let Y3 0
+  let Z3 0
+  let P1P2 array:from-list [0 0 0]  ; Tangent at P1
+  let P2P3 array:from-list [0 0 0]  ; Tangent at P3
+  let P1P3 array:from-list [0 0 0]  ; Acceleration at P2
+  let out []
+  let arclength 0
+  let KCurv 0
+
+
+  ; From Fairin 1997 de Casteljau and CAST.AWK de Kemp 1998
+  ; [ k <= Hpnts ] [
+  while [ k <= Hpnts ] [
+
+    set t (1 / Hpnts) * k
+
+    poly_curve lx  Degree t
+    set X PN  set X2 PN2 set X3 PN3
+    poly_curve ly  Degree t
+    set Y PN  set Y2 PN2 set Y3 PN3
+    poly_curve lz  Degree t
+    set Z PN  set Z2 PN2 set Z3 PN3
+
+    set arclength arclength + sqrt ((X2 - X) ^ 2 + (Y2 - Y)^ 2 + (Z2 - Z)^ 2)
+
+    array:set P1P2 0 X2 - X
+    array:set P1P2 1 Y2 - Y
+    array:set P1P2 2 Z2 - Z
+    array:set P2P3 0 X3 - X2
+    array:set P2P3 1 Y3 - Y2
+    array:set P2P3 2 Z3 - Z2
+    array:set P1P3 0 array:item P2P3 0 - array:item P1P2 0
+    array:set P1P3 1 array:item P2P3 1 - array:item P1P2 1
+    array:set P1P3 2 array:item P2P3 2 - array:item P1P2 2
+
+    set KCurv sqrt ((array:item P1P3 0) ^ 2 + (array:item P1P3 1) ^ 2 + (array:item P1P3 2) ^ 2)
+;type KCurv type "\n"
+    ask patch-here [sprout-curve 1 [ setxyz X Y Z set Curve_ID Bezier_ID set Vertex_ID k set shape "dot" set color 24 set size 2 ] ]
+
+    set k (K + 1)
+    ]
+    ;ask curve with [Curve_ID = Bezier_ID] [set Arc_Length arclength show Curve_ID show Vertex_ID show Arc_Length]
+    ask curve with [Curve_ID = Bezier_ID] [set Arc_Length arclength set Curv KCurv]
+
+end
+
+to poly_curve [Points Level s]
+
+
+; put point lists into indexed array for easier handling
+let pnts array:from-list Points
+
+let r 1
+while [r <= Level]
+     [
+
+
+      let j 0
+      while [j <= (Level - r) ]
+      [
+
+        array:set pnts j ((1 - s) * array:item pnts j) + (s * array:item pnts (j + 1))
+
+        set j (j + 1)
+        ]
+
+      set PN array:item pnts 0
+      ; get also the second point
+      set PN2 array:item pnts 1
+      ; get also the third point
+      set PN3 array:item pnts 2
+      set r (r + 1)
+     ]
+end
+
+
+
+
+
+
+
+; plot histogram of strike and dip
+to do-plot
+
+
+  set-current-plot "Orientation"
+  set-current-plot-pen "strike"
+
+  histogram [pstrike] of patches with [estimated = 1]
+  set-current-plot-pen "dip"
+  histogram [pdip] of patches with [estimated = 1]
+
+
+
+  ;set-current-plot "Proximity"
+  ;set-current-plot-pen "distance"
+  ;ask patches with [estimated = 1] [ plot pdist2data ]
+ ;plot count patches with estimated = 1
+ ;set-current-plot-pen "dip"
+ ;plot count patches with [pcolor = 44]
+ ;set-current-plot-pen "Total_Life"
+ ;plot Total_Life
+; set-current-plot-pen "clock"
+ ;plot ticks
+
+ tick
+end
+@#$#@#$#@
+GRAPHICS-WINDOW
+0
+0
+245
+133
+-1
+-1
+2.0
+1
+10
+1
+1
+1
+0
+1
+1
+1
+0
+50
+0
+50
+0
+25
+1
+0
+1
+ticks
+30.0
+
+BUTTON
+21
+17
+84
+50
+NIL
+setup
+NIL
+1
+T
+OBSERVER
+NIL
+NIL
+NIL
+NIL
+1
+
+INPUTBOX
+180
+19
+244
+79
+seeds
+1.0
+1
+0
+Number
+
+BUTTON
+21
+64
+86
+97
+NIL
+go
+T
+1
+T
+OBSERVER
+NIL
+NIL
+NIL
+NIL
+1
+
+MONITOR
+22
+227
+79
+272
+counter
+counter
+0
+1
+11
+
+MONITOR
+108
+230
+202
+275
+New Estimates
+Num_Estimates
+0
+1
+11
+
+INPUTBOX
+333
+19
+407
+79
+target
+1000.0
+1
+0
+Number
+
+INPUTBOX
+256
+19
+316
+79
+scouts
+1.0
+1
+0
+Number
+
+INPUTBOX
+180
+95
+250
+155
+observations
+5.0
+1
+0
+Number
+
+SLIDER
+20
+300
+192
+333
+strike
+strike
+0
+360
+90.0
+1
+1
+NIL
+HORIZONTAL
+
+SLIDER
+205
+300
+377
+333
+dip
+dip
+0
+90
+78.0
+1
+1
+NIL
+HORIZONTAL
+
+SLIDER
+385
+300
+557
+333
+variability
+variability
+0
+1
+0.6
+.1
+1
+NIL
+HORIZONTAL
+
+PLOT
+25
+355
+370
+615
+Orientation
+degrees
+Occurrences
+0.0
+360.0
+0.0
+100.0
+true
+true
+"" ""
+PENS
+"strike" 10.0 1 -16777216 true "" ""
+"dip" 10.0 1 -2674135 true "" ""
+
+TEXTBOX
+420
+280
+570
+298
+Input Variability
+11
+0.0
+1
+
+SLIDER
+295
+110
+467
+143
+smoothness
+smoothness
+0
+1
+0.5
+.1
+1
+NIL
+HORIZONTAL
+
+PLOT
+390
+360
+580
+480
+Proximity
+Estimation
+distance
+0.0
+1.0
+0.0
+10.0
+true
+false
+"" ""
+PENS
+"distance" 100.0 1 -13345367 true "" ""
+
+SLIDER
+295
+160
+467
+193
+Length_Scale
+Length_Scale
+0
+100
+13.0
+1
+1
+NIL
+HORIZONTAL
+
+SLIDER
+295
+205
+467
+238
+Density
+Density
+0
+100
+6.0
+1
+1
+NIL
+HORIZONTAL
+
+SLIDER
+480
+110
+652
+143
+Max_Length
+Max_Length
+0
+1000
+213.0
+1
+1
+NIL
+HORIZONTAL
+
+SLIDER
+480
+160
+652
+193
+Curvature
+Curvature
+0
+1
+0.01
+.01
+1
+NIL
+HORIZONTAL
+
+CHOOSER
+475
+25
+622
+70
+Method
+Method
+"Nearest neighbour" "IDW"
+0
+
+SWITCH
+20
+115
+155
+148
+Estimated_Points
+Estimated_Points
+0
+1
+-1000
+
+SWITCH
+20
+160
+155
+193
+Node_Labels
+Node_Labels
+1
+1
+-1000
+
+BUTTON
+100
+20
+160
+55
+Reset
+Reset
+NIL
+1
+T
+OBSERVER
+NIL
+NIL
+NIL
+NIL
+0
+
+PLOT
+390
+495
+590
+645
+Trace Curvature
+tick
+Curvature
+0.0
+10.0
+0.0
+10.0
+true
+false
+"" ""
+PENS
+"default" 1.0 0 -16777216 true "" "plot Active_curvature"
+
+TEXTBOX
+780
+280
+930
+298
+NIL
+11
+0.0
+1
+
+@#$#@#$#@
+## WHAT IS IT?
+
+A simple agent based dip and down dip trace demo. Similar to Structural Field Interpolation (SFI). Modelling of geological Fabric observations. Essentially a 3D form trace model. 
+
+## HOW IT WORKS
+
+The search agent (red sphere) travels through the model space randomly until it senses a proximal dip observation. It will then adjust its trajectory towards a down dip vector to this observation and spawn other simulated dip points that are nearest neighbour (NN) or inverse distance weighted (IDW) interpolations from the data. A stream of points is recorded as the search agent moves through the model space. This point stream will form de Casteljau – Bézier (Farin 1997) curves that are either killed or preserved based on simple user specified shape parameters.
+
+## HOW TO USE IT
+
+Set any sliders or input buttons as desired.
+    for a simple demo, use the following parameters:
+
+        Paths 1
+        Scouts 1
+        target 1000
+        observations 5
+        smoothness .5
+        Lengthscale 5
+        Density 8
+        Max Length 500
+        Curvature .1
+        strike 45
+        dip 45
+        variability .5
+
+ 2) Select the "Setup" button.
+ 3) Select the "Launch" button.
+ 4) When ready for the simulation to end, select the "Stop" button.
+
+## THINGS TO NOTICE
+
+This section could give some ideas of things for the user to notice while running the model.
+
+## THINGS TO TRY
+
+Increase the variabilty slider to get more complex trajectories. Turn off and on estimated points to show results of local NN or IDW estimates used by the scouts.
+
+## EXTENDING THE MODEL
+
+ Development needed :
+
+ IDW not implemented yet ...implemented in other programs.
+ Extend Bezier - de Casteljau algorith to respect last end point of streamline for    curvature based shape limits.
+ Make possible freezing input data configuration and running other simulations....
+ Implement topology so input has tops and estimation has tops and simualtion respects      tops, not implemented.
+ Need new vector graphics for tops. Not implmented.
+
+## NETLOGO FEATURES
+
+Needed new glyphs for struyctural graphics. Use the associated shape files. Here the file 3d_Shape.txt was created to define new a new 'tablet' shape.   
+
+## RELATED MODELS
+
+Rotate
+
+## CREDITS AND REFERENCES
+
+References:
+            See original code from Erics Models_2013\Observation_Trace_3D.nlogo.nlogo3d
+            3D form line construction by structural field interpolation (SFI) of geologic             strike and dip observations,
+            Mike Hillier, Eric deKemp and Ernst Schetselaar, Journal of Structural                    Geology 51 (2013) p. 167-179.
+            Any references used for particular functions are listed in the
+            header for that function.
+@#$#@#$#@
+default
+true
+0
+Polygon -7500403 true true 150 5 40 250 150 205 260 250
+
+airplane
+true
+0
+Polygon -7500403 true true 150 0 135 15 120 60 120 105 15 165 15 195 120 180 135 240 105 270 120 285 150 270 180 285 210 270 165 240 180 180 285 195 285 165 180 105 180 60 165 15
+
+arrow
+true
+0
+Polygon -7500403 true true 150 0 0 150 105 150 105 293 195 293 195 150 300 150
+
+bug
+true
+0
+Circle -7500403 true true 96 182 108
+Circle -7500403 true true 110 127 80
+Circle -7500403 true true 110 75 80
+Line -7500403 true 150 100 80 30
+Line -7500403 true 150 100 220 30
+
+butterfly
+true
+0
+Polygon -7500403 true true 150 165 209 199 225 225 225 255 195 270 165 255 150 240
+Polygon -7500403 true true 150 165 89 198 75 225 75 255 105 270 135 255 150 240
+Polygon -7500403 true true 139 148 100 105 55 90 25 90 10 105 10 135 25 180 40 195 85 194 139 163
+Polygon -7500403 true true 162 150 200 105 245 90 275 90 290 105 290 135 275 180 260 195 215 195 162 165
+Polygon -16777216 true false 150 255 135 225 120 150 135 120 150 105 165 120 180 150 165 225
+Circle -16777216 true false 135 90 30
+Line -16777216 false 150 105 195 60
+Line -16777216 false 150 105 105 60
+
+car
+false
+0
+Polygon -7500403 true true 300 180 279 164 261 144 240 135 226 132 213 106 203 84 185 63 159 50 135 50 75 60 0 150 0 165 0 225 300 225 300 180
+Circle -16777216 true false 180 180 90
+Circle -16777216 true false 30 180 90
+Polygon -16777216 true false 162 80 132 78 134 135 209 135 194 105 189 96 180 89
+Circle -7500403 true true 47 195 58
+Circle -7500403 true true 195 195 58
+
+circle
+false
+0
+Circle -7500403 true true 0 0 300
+
+circle 2
+false
+0
+Circle -7500403 true true 0 0 300
+Circle -16777216 true false 30 30 240
+
+cow
+false
+0
+Polygon -7500403 true true 200 193 197 249 179 249 177 196 166 187 140 189 93 191 78 179 72 211 49 209 48 181 37 149 25 120 25 89 45 72 103 84 179 75 198 76 252 64 272 81 293 103 285 121 255 121 242 118 224 167
+Polygon -7500403 true true 73 210 86 251 62 249 48 208
+Polygon -7500403 true true 25 114 16 195 9 204 23 213 25 200 39 123
+
+cylinder
+false
+0
+Circle -7500403 true true 0 0 300
+
+dip
+true
+4
+Line -1184463 true 150 150 150 135
+Line -1184463 true 195 150 105 150
+
+dot
+false
+0
+Circle -7500403 true true 90 90 120
+
+face happy
+false
+0
+Circle -7500403 true true 8 8 285
+Circle -16777216 true false 60 75 60
+Circle -16777216 true false 180 75 60
+Polygon -16777216 true false 150 255 90 239 62 213 47 191 67 179 90 203 109 218 150 225 192 218 210 203 227 181 251 194 236 217 212 240
+
+face neutral
+false
+0
+Circle -7500403 true true 8 7 285
+Circle -16777216 true false 60 75 60
+Circle -16777216 true false 180 75 60
+Rectangle -16777216 true false 60 195 240 225
+
+face sad
+false
+0
+Circle -7500403 true true 8 8 285
+Circle -16777216 true false 60 75 60
+Circle -16777216 true false 180 75 60
+Polygon -16777216 true false 150 168 90 184 62 210 47 232 67 244 90 220 109 205 150 198 192 205 210 220 227 242 251 229 236 206 212 183
+
+fish
+false
+0
+Polygon -1 true false 44 131 21 87 15 86 0 120 15 150 0 180 13 214 20 212 45 166
+Polygon -1 true false 135 195 119 235 95 218 76 210 46 204 60 165
+Polygon -1 true false 75 45 83 77 71 103 86 114 166 78 135 60
+Polygon -7500403 true true 30 136 151 77 226 81 280 119 292 146 292 160 287 170 270 195 195 210 151 212 30 166
+Circle -16777216 true false 215 106 30
+
+flag
+false
+0
+Rectangle -7500403 true true 60 15 75 300
+Polygon -7500403 true true 90 150 270 90 90 30
+Line -7500403 true 75 135 90 135
+Line -7500403 true 75 45 90 45
+
+flower
+false
+0
+Polygon -10899396 true false 135 120 165 165 180 210 180 240 150 300 165 300 195 240 195 195 165 135
+Circle -7500403 true true 85 132 38
+Circle -7500403 true true 130 147 38
+Circle -7500403 true true 192 85 38
+Circle -7500403 true true 85 40 38
+Circle -7500403 true true 177 40 38
+Circle -7500403 true true 177 132 38
+Circle -7500403 true true 70 85 38
+Circle -7500403 true true 130 25 38
+Circle -7500403 true true 96 51 108
+Circle -16777216 true false 113 68 74
+Polygon -10899396 true false 189 233 219 188 249 173 279 188 234 218
+Polygon -10899396 true false 180 255 150 210 105 210 75 240 135 240
+
+hexagonal prism
+false
+0
+Rectangle -7500403 true true 90 90 210 270
+Polygon -1 true false 210 270 255 240 255 60 210 90
+Polygon -13345367 true false 90 90 45 60 45 240 90 270
+Polygon -11221820 true false 45 60 90 30 210 30 255 60 210 90 90 90
+
+house
+false
+0
+Rectangle -7500403 true true 45 120 255 285
+Rectangle -16777216 true false 120 210 180 285
+Polygon -7500403 true true 15 120 150 15 285 120
+Line -16777216 false 30 120 270 120
+
+leaf
+false
+0
+Polygon -7500403 true true 150 210 135 195 120 210 60 210 30 195 60 180 60 165 15 135 30 120 15 105 40 104 45 90 60 90 90 105 105 120 120 120 105 60 120 60 135 30 150 15 165 30 180 60 195 60 180 120 195 120 210 105 240 90 255 90 263 104 285 105 270 120 285 135 240 165 240 180 270 195 240 210 180 210 165 195
+Polygon -7500403 true true 135 195 135 240 120 255 105 255 105 285 135 285 165 240 165 195
+
+line
+true
+0
+Line -7500403 true 150 0 150 300
+
+line half
+true
+0
+Line -7500403 true 150 0 150 150
+
+pentagon
+false
+0
+Polygon -7500403 true true 150 15 15 120 60 285 240 285 285 120
+
+person
+false
+0
+Circle -7500403 true true 110 5 80
+Polygon -7500403 true true 105 90 120 195 90 285 105 300 135 300 150 225 165 300 195 300 210 285 180 195 195 90
+Rectangle -7500403 true true 127 79 172 94
+Polygon -7500403 true true 195 90 240 150 225 180 165 105
+Polygon -7500403 true true 105 90 60 150 75 180 135 105
+
+plant
+false
+0
+Rectangle -7500403 true true 135 90 165 300
+Polygon -7500403 true true 135 255 90 210 45 195 75 255 135 285
+Polygon -7500403 true true 165 255 210 210 255 195 225 255 165 285
+Polygon -7500403 true true 135 180 90 135 45 120 75 180 135 210
+Polygon -7500403 true true 165 180 165 210 225 180 255 120 210 135
+Polygon -7500403 true true 135 105 90 60 45 45 75 105 135 135
+Polygon -7500403 true true 165 105 165 135 225 105 255 45 210 60
+Polygon -7500403 true true 135 90 120 45 150 15 180 45 165 90
+
+sheep
+false
+0
+Rectangle -7500403 true true 151 225 180 285
+Rectangle -7500403 true true 47 225 75 285
+Rectangle -7500403 true true 15 75 210 225
+Circle -7500403 true true 135 75 150
+Circle -16777216 true false 165 76 116
+
+square
+false
+0
+Rectangle -7500403 true true 30 30 270 270
+
+square 2
+false
+0
+Rectangle -7500403 true true 30 30 270 270
+Rectangle -16777216 true false 60 60 240 240
+
+star
+false
+0
+Polygon -7500403 true true 151 1 185 108 298 108 207 175 242 282 151 216 59 282 94 175 3 108 116 108
+
+tablet
+true
+4
+Rectangle -1184463 true true 60 105 240 195
+
+target
+false
+0
+Circle -7500403 true true 0 0 300
+Circle -16777216 true false 30 30 240
+Circle -7500403 true true 60 60 180
+Circle -16777216 true false 90 90 120
+Circle -7500403 true true 120 120 60
+
+tree
+false
+0
+Circle -7500403 true true 118 3 94
+Rectangle -6459832 true false 120 195 180 300
+Circle -7500403 true true 65 21 108
+Circle -7500403 true true 116 41 127
+Circle -7500403 true true 45 90 120
+Circle -7500403 true true 104 74 152
+
+triangle
+false
+0
+Polygon -7500403 true true 150 30 15 255 285 255
+
+triangle 2
+false
+0
+Polygon -7500403 true true 150 30 15 255 285 255
+Polygon -16777216 true false 151 99 225 223 75 224
+
+truck
+false
+0
+Rectangle -7500403 true true 4 45 195 187
+Polygon -7500403 true true 296 193 296 150 259 134 244 104 208 104 207 194
+Rectangle -1 true false 195 60 195 105
+Polygon -16777216 true false 238 112 252 141 219 141 218 112
+Circle -16777216 true false 234 174 42
+Rectangle -7500403 true true 181 185 214 194
+Circle -16777216 true false 144 174 42
+Circle -16777216 true false 24 174 42
+Circle -7500403 false true 24 174 42
+Circle -7500403 false true 144 174 42
+Circle -7500403 false true 234 174 42
+
+turtle
+true
+0
+Polygon -10899396 true false 215 204 240 233 246 254 228 266 215 252 193 210
+Polygon -10899396 true false 195 90 225 75 245 75 260 89 269 108 261 124 240 105 225 105 210 105
+Polygon -10899396 true false 105 90 75 75 55 75 40 89 31 108 39 124 60 105 75 105 90 105
+Polygon -10899396 true false 132 85 134 64 107 51 108 17 150 2 192 18 192 52 169 65 172 87
+Polygon -10899396 true false 85 204 60 233 54 254 72 266 85 252 107 210
+Polygon -7500403 true true 119 75 179 75 209 101 224 135 220 225 175 261 128 261 81 224 74 135 88 99
+
+wheel
+false
+0
+Circle -7500403 true true 3 3 294
+Circle -16777216 true false 30 30 240
+Line -7500403 true 150 285 150 15
+Line -7500403 true 15 150 285 150
+Circle -7500403 true true 120 120 60
+Line -7500403 true 216 40 79 269
+Line -7500403 true 40 84 269 221
+Line -7500403 true 40 216 269 79
+Line -7500403 true 84 40 221 269
+
+x
+false
+0
+Polygon -7500403 true true 270 75 225 30 30 225 75 270
+Polygon -7500403 true true 30 75 75 30 270 225 225 270
+@#$#@#$#@
+NetLogo 3D 6.0.4
+@#$#@#$#@
+@#$#@#$#@
+@#$#@#$#@
+@#$#@#$#@
+@#$#@#$#@
+default
+0.0
+-0.2 0 0.0 1.0
+0.0 1 1.0 0.0
+0.2 0 0.0 1.0
+link direction
+true
+0
+Line -7500403 true 150 150 90 180
+Line -7500403 true 150 150 210 180
+@#$#@#$#@
+1
+@#$#@#$#@

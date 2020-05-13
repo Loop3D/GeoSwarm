@@ -1,0 +1,1294 @@
+;Program:  Rotate.nlogo
+;
+;Description: A simple slider based interface to rotate planar field observations.
+;
+; Author: Eric A. de Kemp
+;
+; Creation Date: December 1, 2016
+;
+; Modifications: Feb. 14, 2017   Final Testing
+;                June 23, 2017   Intermediate points estimated
+;                July 4, 2017    Radial SLERP estimation added
+;
+; Outstanding Issues:
+;                     Break out seperate functions for strike-dip to normal conversion ....
+;
+; Description:
+;
+;
+;
+;
+
+;
+; References:
+;
+; 1. De Paor, Declan G., 1996, Structural Geology and Personal Computers - Computation of Orientations for GIS — the ‘Roll’ of Quaternions
+;    Computer Methods in the Geosciences 1996 Volume: 15   Issue: c   Page: 447-456
+;
+; 2. De Paor, D.G., 1995. Quaternions, raster shears, and the modeling of rotations in structural
+;    and tectonic studies, Proceedings and abstracts: Geological Society of America 27 (6), p.72,
+;    1995 annual meeting, New Orleans, LA, United States. Nov. 6-9, 1995
+;
+; 3. John Walden's course notes see https://courses.eas.ualberta.ca/eas421/lecturepages/orientation.html
+;
+;
+; Notes:
+;
+; Needs external ascii file 3d_Shape.txt in local folder to define top and bottom tablet shapes
+; based on work of Sir William Rowhan Hamilton 1853 and Declan G. de Paor 1995,1996 with help from John Waldon's course notes.
+;
+; Coordinate system:  azimuth/trend = 0   degrees is North X zero     Y positive
+;                     azimuth/trend = 90  degrees is East  X positive Y zero
+;                     azimuth/trend = 180 degrees is South X zero     Y negative
+;                     azimuth/trend = 270 degrees is West  X negative Y zero
+;                     azimuth/trend = 360 degrees is North X zero     Y positive
+;                     plunge = up   Z is positive
+;                     plunge = down Z is negative
+;
+
+extensions [ array matrix ]
+
+
+; Declare the global variables
+globals [ Go PRotation pdata rad dipdir simstrike simdip polarity azimuth Len Norm Nx Ny Nz ddx ddy ddz sx sy sz V q1 q2 q3 Qr ]
+
+; Make the main agents
+breed [data observation]
+breed [axis vector]
+
+; Set the agent properties
+data-own [ did pid my_azimuth my_dip n1 n2 n3  ]
+axis-own [ lid my_trend my_plunge]
+
+
+
+to setup  ; an observer based setup
+  ;; (for this model to work with NetLogo's new plotting features,
+  ;; __clear-all-and-reset-ticks should be replaced with clear-all at
+  ;; the beginning of your setup procedure and reset-ticks at the end
+  ;; of the procedure.)
+  __clear-all-and-reset-ticks
+
+
+  orbit-down 45
+  orbit-left 45
+
+  ; Set global variables
+  set Go false
+  set ShowData true
+  set rad 57.2958 ; Degrees to Radians conversion factor 1 Radian = 57.2958 Degrees (pi * rad = 180 degrees)
+  set dipdir 0
+  set simstrike 0
+  set simdip 0
+  set polarity -99999  ; top direction
+  set Len 0  ; Length of vector
+
+  set Nx 0  ; working Normal(0) componenet
+  set Ny 0  ; working Normal(1) componenet
+  set Nz 0  ; working Normal(2) componenet
+  set Norm array:from-list [0 0 0]  ; Normal vector-array
+  set ddx 0  ; working down dip (0) componenet
+  set ddy 0  ; working down dip (1) componenet
+  set ddz 0  ; working down dip (2) componenet
+  set sx 0 ; working strike right hand rule (0) componenet
+  set sy 0 ; working strike right hand rule (1) componenet
+  set sz 0 ; working strike right hand rule (2) componenet
+  set q1 0 ; component (0) of the rotational vector
+  set q2 0 ; component (1) of the rotational vector
+  set q3 0 ; component (2) of the rotational vector
+  set V array:from-list [0 0 0]   ; rotational vector-array
+  set azimuth 0
+  set Qr matrix:from-column-list [[0 0 0 0 0]]
+  set PRotation Rotation ; to track updates of the interface slider bar for Rotaiton
+
+  ; Load the bedding shape descriptions
+  load-shapes-3d "3d_Shape.txt"
+
+
+  ; Create Seed Data
+ ; Planar Data
+ create-data 1 [set did 1 set shape "tablettop3d" set color yellow set size 3 setxyz 0 0 0 set heading Strike set roll Dip show-turtle]
+ create-data 1 [set did -1 set shape "tabletbase3d" set color red set size 3 setxyz 0 0 0 set heading Strike set roll Dip show-turtle]
+ create-data 1 [set did 0 set shape "circle" set color yellow set size .1 setxyz 0 0 0 set heading Strike + 90 set pitch 90 - Dip hide-turtle]
+ create-data 1 [set did 2 set shape "circle" set color yellow set size 1 setxyz 0 0 0 set heading Strike + 90 set pitch 90 - Dip show-turtle]
+ ask one-of data with [did = 2] [jump 7 show-turtle create-link-with one-of data with [did = 0] [set color yellow set thickness 3]]
+
+
+ ; Linear rotation axis
+
+ ; down plunge vector
+    set q1   sin Trend  * cos Plunge
+    set q2   cos Trend  * cos Plunge
+    set q3    -1 * sin Plunge
+
+
+    let r []
+    set r lput q1 r
+    set r lput q2 r
+    set r lput q3 r
+    set V array:from-list r
+
+
+ create-axis 1 [set lid 1 set shape "circle" set color green set size 2 setxyz 0 0 0 set heading Trend set pitch Plunge * -1 hide-turtle]
+ create-axis 1 [set lid -1 set shape "circle" set color green set size 2 setxyz 0 0 0 set heading Trend - 180 set pitch Plunge   hide-turtle]
+
+ ask axis with [abs lid = 1] [show-turtle jump 25]
+
+ ask axis with [lid = 1] [create-link-with one-of axis with [lid = -1]  [set color green set thickness 5]]
+
+ ; Create the quaternion rotational elements
+create-data 1 [hide-turtle set did 100 set shape "tablettop3d" set color white set size 2 setxyz 0 0 0 set heading Strike set roll Dip ]
+create-data 1 [hide-turtle set did 101 set shape "tabletbase3d" set color blue set size 2 setxyz 0 0 0 set heading Strike set roll Dip ]
+create-data 1 [hide-turtle set did 102 set shape "circle" set color white set size .1 setxyz 0 0 0 set heading Strike + 90 set pitch 90 - Dip  ]
+create-data 1 [hide-turtle set did 103 set shape "circle" set color white set size .5 setxyz 0 0 0 set heading Strike + 90 set pitch 90 - Dip jump 5 ]
+ask data with [did = 103] [ create-link-with one-of data with [did = 102] [set color white set thickness 2] show-turtle]
+
+
+; make a point seed from the origin to show SLERP behavior
+create-data 1 [hide-turtle set did 10 set shape "tablettop3d" set color white set size .5 setxyz 0 0 0 set heading Strike set roll Dip  ]
+create-data 1 [hide-turtle set did 11 set shape "tabletbase3d" set color blue set size .5 setxyz 0 0 0 set heading Strike set roll Dip  ]
+create-data 1 [hide-turtle set did 200 set shape "tablettop3d" set color white set size .5 setxyz 0 0 0 set heading 0 set roll 0  ]
+create-data 1 [hide-turtle set did 201 set shape "tabletbase3d" set color blue set size .5 setxyz 0 0 0 set heading 0 set roll 0  ]
+
+; a pair of agents to show the orientation of the estimated point
+create-data 1 [set did 500 set shape "tablettop3d" set color white set size .5 setxyz 0 0 0 set heading 0 set roll 0 hide-turtle]
+create-data 1 [set did 501 set shape "tabletbase3d" set color blue set size .5 setxyz 0 0 0 set heading 0 set roll 0 hide-turtle]
+set pdata data with [did = 500 or did = 501]
+
+; A red point to trace the path of the interpolation estimate
+create-data 1 [hide-turtle set did 1000 set shape "circle" set color red set size 2 setxyz 0 0 0 set heading 0 set roll 0  ]
+
+
+
+  reset-ticks
+end
+
+
+
+to simulate    ; an agent based proceedure
+  ; Convert SEED strike and dip to dip direction before anything else
+  ; No need to use radians here, needs quaternion implementation to accomodate
+  ; spherical rotations
+
+  ; stop when iterations hits that target count
+  ; if ticks >= 1000 [ stop ]
+  if ticks >= 1000 [ reset-ticks ]
+
+  ; Update the orientation from the user interface paramiters
+  set simstrike Strike set simdip Dip
+
+  ; calculate normal of planar observation
+
+  if (overturned) [set simstrike simstrike set simdip simdip + 180]
+  ifelse (overturned) [set polarity -1] [set polarity 1]
+  if (polarity = -1 and simdip = 90) [set polarity 1]
+
+  ask data with [did < 100] [set heading simstrike set roll simdip]
+  ask one-of data with [did = 2] [setxyz Nx * 7 Ny * 7 Nz * 7 set heading simstrike + 90 set pitch 90 - simdip show-turtle]
+  ;ask one-of data with [did = 2] [jump 7 show-turtle]
+
+  ; Visualize planar symbols through interface button
+  ifelse (ShowData) [ ask data with [abs did = 1] [show-turtle]] [ask data with [abs did = 1] [hide-turtle]]
+  ifelse (ShowData) [ ask data with [did = 100 or did = 101] [show-turtle]] [ask data with [did = 100 or did = 101] [hide-turtle]]
+
+    ; Convert strike to dip direction and strike vector, input is in degrees
+
+    ; down dip vector
+    set ddx cos (-1 * simstrike ) * cos (-1 * simdip )
+    set ddy sin (-1 * simstrike ) * cos (-1 * simdip )
+    set ddz sin (-1 * simdip )
+
+    ; strike vector
+    set sx -1 * ddy
+    set sy ddx
+    set sz 0
+
+    ; v Cross vp to get the normal or pole to bedding p. 143 Algebra & Geometry, Stewart et al. 1989
+    set Nx (ddy * sz) - (ddz * sy)
+    set Ny (ddz * sx) - (ddx * sz)
+    set Nz (ddx * sy) - (ddy * sx)
+
+
+  ; Normalize the normal for unit length
+  set Len sqrt(Nx ^ 2 + Ny ^ 2 + Nz ^ 2)
+
+  set Nx polarity * Nx / Len
+  set Ny polarity * Ny / Len
+  set Nz polarity * Nz / Len
+
+       ask data with [did < 100] [set n1 Nx set n2 Ny set n3 Nz]
+
+       set Norm matrix:from-column-list [[ 0 0 0]]
+
+
+
+
+       ;matrix:set matrix row-i col-j new-value
+       matrix:set Norm 0 0 Nx
+       matrix:set Norm 1 0 Ny
+       matrix:set Norm 2 0 Nz
+
+
+
+
+
+
+      ; Call the quaternion calculator called spin
+      ; Pass the Rotation in degrees (+/-), V the vector axis of rotation and Norm the starting normal to bedding
+      let Orientation spin Rotation V Norm
+
+
+
+
+      let PStrike array:item Orientation 0
+      let PDip array:item Orientation 1
+      let Px array:item Orientation 2
+      let Py array:item Orientation 3
+      let Pz array:item Orientation 4
+
+      ask data with [did = 100] [setxyz 0 0 0 set heading PStrike set roll PDip ]
+      ask data with [did = 101] [setxyz 0 0 0 set heading PStrike set roll PDip ]
+      ask data with [did = 102] [setxyz 0 0 0 set heading azimuth set pitch 90 - PDip  ]
+      ask data with [did = 103] [setxyz Px * 5 Py * 5 Pz * 5 set heading azimuth set pitch 90 - Pdip show-turtle]
+
+      ;type "Rotation " type Rotation type " Rotated  Strike and Dip:  " type Orientation type "\n"
+      ;print Orientation
+
+      SLERP array:item Orientation 0 array:item Orientation 1
+      wait .3
+      ask data with [did = 999] [die]
+
+  tick
+
+end
+
+
+; Spin proceedure using QUATERNIONS input is:
+; A = rotation range in degrees,
+; Q = a rotation axis as a unit vector,
+; P = a unit normal array to a fabric plane
+; returns
+to-report spin [ A Q P ]
+
+ ; Make the Normal matrix
+let N matrix:copy P
+
+
+ ; Use SLERP (Spherical Linear Interpolator) to rotate the observation set incremntally by 1 degree increments
+ ; with slow motion so user can see the effect.
+
+ ; Transform from Single vector to quaternion with rotation A about an axis Q
+
+let qw 0
+let q2w 0
+
+let qx 0
+let qy 0
+let qz 0
+let q2x 0
+let q2y 0
+let q2z 0
+
+let Rxx 0
+let Rxy 0
+let Rxz 0
+let Ryx 0
+let Ryy 0
+let Ryz 0
+let Rzx 0
+let Rzy 0
+let Rzz 0
+
+let RNx 0
+let RNy 0
+let RNZ 0
+let RLen 0
+
+let Rsimstrike 0
+let Rsimdip 0
+let Roverturned FALSE
+let RHR_Orientation array:from-list [0 0 0 0 0 0] ; Right Hand Rule planar orientation for STRIKE, DIP, N1, N2 ,N3, OVERTURNED
+
+; Make the rotation matrix
+let R matrix:from-row-list [[0 0 0] [0 0 0] [0 0 0]]
+
+;
+; Rotation Matrix  (eq.16 de Paor 1996)
+;
+;
+;
+;        |   Rxx      Rxy       Rxz    |
+;  R =   |   Ryx      Ryy       Ryz    |
+;        |   Rzx      Rzy      Rzz     |
+;
+;
+;
+;        |   q2w+q2x-q2y-q2z    2qxqy-2qzqw     2qzqx+2qyqw    |
+;  R =   |   2qxqy+2qzqw       q2wq2x+q2y-q2z   2qyqz-2qwqx    |
+;        |   2qzqx-2qyqw       2qyqz+2qwqx    q2wq2x-q2y+q2z   |
+;
+;
+;
+; q = s + iV
+; unit quaternion expression
+; q = s + ixVx + iyVy + izVz
+; q = (s,V) where s is the scalar component and V is the vector
+; u = (cos(A/2),sin(A/2)V)
+;          |qx|
+; q = ( qw,|qy| )
+;          |qz|
+;
+; qw = cos(A/2)  where A is the angle of rotation
+;
+; V =  (qx,qy,qz) where V is the rotation vector
+
+
+  set qx ( sin ( A / 2 ) * ( array:item Q 0 ))
+  set qy ( sin ( A / 2 ) * ( array:item Q 1 ))
+  set qz ( sin ( A / 2 ) * ( array:item Q 2 ))
+  set qw ( cos ( A / 2) )
+
+
+  ; (eq.17 de Paor 1996)
+  set q2w (1 - (qx ^ 2) - (qy ^ 2) - (qz ^ 2))
+
+  ; For a check on qw from previous calculation
+  ; qw  = sqrt(Rxx + Ryy + Rzz + 1) / 2 (eq.18a de Paor 1996)
+
+  set q2x qx ^ 2
+  set q2y qy ^ 2
+  set q2z qz ^ 2
+
+; Find all elements of the rotation matrix
+; Note that the rotation natrix will get recalculated for each input observation
+
+  ; Calculations verified with test pattern data set in R
+  set Rxx q2w + q2x - q2y - q2z
+  set Rxy (2 * qx * qy) - (2 * qz * qw)
+  set Rxz (2 * qz * qx) + (2 * qy * qw)
+  set Ryx (2 * qx * qy) + (2 * qz * qw)
+  set Ryy q2w - q2x + q2y - q2z
+  set Ryz (2 * qy * qz) - (2 * qw * qx)
+  set Rzx (2 * qz * qx) - (2 * qy * qw)
+  set Rzy (2 * qy * qz) + (2 * qw * qx)
+  set Rzz q2w - q2x - q2y + q2z
+
+ ; matrix element access format
+ ; matrix:set matrix row-i col-j new-value
+
+  matrix:set R 0 0 Rxx
+  matrix:set R 0 1 Rxy
+  matrix:set R 0 2 Rxz
+  matrix:set R 1 0 Ryx
+  matrix:set R 1 1 Ryy
+  matrix:set R 1 2 Ryz
+  matrix:set R 2 0 Rzx
+  matrix:set R 2 1 Rzy
+  matrix:set R 2 2 Rzz
+
+; Comment out if you need to see the rotation matrix
+; print matrix:pretty-print-text R
+
+
+; Apply the rotation to the normal vector
+; N is a normal vector passed to the spin proceedure
+; R - Code
+; N = R %*% N
+
+
+
+let RN matrix:times R N
+
+; derive all the other geometic elements from the new rotated normal vector
+
+    set RNx matrix:get RN 0 0
+    set RNy matrix:get RN 1 0
+    set RNz matrix:get RN 2 0
+
+    set RLen sqrt ((RNx ^ 2) + (RNy ^ 2) + (RNz ^ 2))
+
+
+    set RNx (RNx / RLen)
+    set RNy (RNy / RLen)
+    set RNz (RNz / RLen)
+
+    ; Need to be careful about Nz (Z normal component)
+    ; If it is postive it needs to be changed to negative to point down into the earth
+    ; since no dips are going up into the air as a measurement
+
+    ; azimuth is dip direction (check for x,y both equal to zero and if true default to 0)
+ifelse (RNx = 0 and RNy = 0) [set azimuth 0 ] [set azimuth atan RNx RNy]
+
+    ;set Rsimdip acos abs RNz
+    set Rsimdip acos RNz
+
+
+
+    if (RNz = 0 and A = 0) []
+
+
+
+    ifelse (RNz < 0 ) [
+      set Roverturned  TRUE
+      set azimuth azimuth - 180
+      ; Not necissary to reflip dip value
+       set Rsimdip -1 * Rsimdip
+         ]
+       [ set Roverturned  FALSE ]
+
+    ; Convert dip direction to strike and dip
+              if ( azimuth < 0 ) [ set azimuth 360 + azimuth ]
+              if ( azimuth  >=  90 ) [ set Rsimstrike azimuth - 90 ]
+              if ( azimuth < 90 ) [ set Rsimstrike  azimuth + 270 ]
+              if ( azimuth > 360) [ set Rsimstrike  -99999 ]
+
+
+
+
+
+
+   ; Return the new rotated orientation plane parameters
+
+   array:set RHR_Orientation 0 precision Rsimstrike 1
+   array:set RHR_Orientation 1 precision Rsimdip 1
+   array:set RHR_Orientation 2 RNx
+   array:set RHR_Orientation 3 RNy
+   array:set RHR_Orientation 4 RNz
+   ifelse (Roverturned) [ array:set RHR_Orientation 5 1 ] [ array:set RHR_Orientation 5 0 ]
+
+  report RHR_Orientation
+
+end
+
+
+; Example of Spherical Linear Interpolation (SLERP)
+to SLERP [Finstrike Findip]
+
+  let i 0
+  ;let t 0
+  let dist 0
+  let r 0
+  let x 0
+  let y 0
+  let z 0
+  let w 0
+  ;set up the end points pairs and estimated points arrays A,B, P
+  ; P,A,B = [X,Y,Z,Rotation, Strike(0-360), Dip(0-90), Overturned(1,0)]
+  let P array:from-list [0 0 0 0 0 0 0]
+  let A array:from-list [0 0 0 0 0 0 0]
+  let B array:from-list [0 0 0 0 0 0 0]
+  array:set B 3 Rotation
+
+
+
+
+  ; make the test pattern
+
+
+  if (Demo = "Horizontal Line") [
+
+
+
+
+    ;;; Need to make start and end point pairs work as well with linear interpolation
+
+       ; P,A,B = [X,Y,Z,Rotation, Strike(0-360), Dip(0-90), Overturned(1,0)]
+       set P array:from-list [0 0 0 0 0 0 0]
+       set A array:from-list [10 0 0 0 0 0 0]
+       set B array:from-list [40 0 0 0 0 0 0]
+       array:set B 3 Rotation
+
+
+       ;start point A
+       ask data with [did = 10 or did = 11] [setxyz array:item A 0 array:item A 1 array:item A 2 set heading simstrike set roll simdip show-turtle]
+
+       ;end point B
+       ask data with [did = 200]  [setxyz array:item B 0 array:item B 1 array:item B 2 set heading Finstrike set roll Findip show-turtle ]
+       ask data with [did = 201]  [setxyz array:item B 0 array:item B 1 array:item B 2 set heading Finstrike set roll Findip show-turtle ]
+
+
+
+
+  ; make intermediate points
+  ; pdata is a global data agentset with did = 500
+  ; symbolized as small red dots
+
+ask data with [did = 1000][
+
+   let t 0
+
+
+    while [t <= 1 ]
+  [
+
+     array:set P 0 ((1 - t) * array:item A 0) + (t * (array:item B 0))
+     array:set P 1 ((1 - t) * array:item A 1) + (t * (array:item B 1))
+     array:set P 2 ((1 - t) * array:item A 2) + (t * (array:item B 2))
+     array:set P 3 ((1 - t) * array:item A 3) + (t * (array:item B 3))
+     let PRot array:item P 3
+
+     ; Call the spin routine to do a single increment
+     let POrientation spin PRot V Norm
+     array:set P 4 array:item POrientation 0
+     array:set P 5 array:item POrientation 1
+
+     set x array:item P 0
+     set y array:item P 1
+     set z array:item P 2
+     setxyz x y z show-turtle
+
+
+     ask pdata with [did = 500] [hatch 1 [set did 999 setxyz x y z set heading array:item P 4 set roll array:item P 5 show-turtle]]
+
+     ask pdata with [did = 501] [hatch 1 [set did 999 setxyz x y z set heading array:item P 4 set roll array:item P 5 show-turtle]]
+
+     set t t + .05
+
+  ]
+
+  ]
+
+
+
+]
+
+; Modify the test pattern for various data configurations
+
+if (Demo = "Horizontal Radials") [
+
+
+
+
+
+
+
+
+
+
+      ; Rotation Angle
+      let ARot 0
+      ; Rotation vector
+      let Qa array:from-list [0 0 1]
+      ; Rotated element in this case a point represented as a unit vector
+      ; and stored as a single column matrix:set matrix row-i col-j new-value
+      let ANorm matrix:from-column-list [[ 0 0 0]]
+       matrix:set ANorm 0 0 1
+       matrix:set ANorm 1 0 0
+       matrix:set ANorm 2 0 0
+      ; incremental rotation in degrees of arc
+      let arc 15
+
+
+
+
+
+
+
+      type "Horizontal Radials 5 degree spokes A inside - B outside P \n"
+      let pA data with [did = 10 or did = 11]
+      let pB data with [did = 200 or did = 201]
+
+      ; Make an inner circle of A points and an outer circle of B points
+      ; make the points rotate about the 0,0,0 axis in the horizontal
+      ; r^2 = x^2 + Y^2 + Z^2
+      ; r = radius = 10
+      ; Z = 0 at the origin
+      ; or use Quaternions such that A,Q,P are specified and returns are a rotated normal.
+      while [ ARot <= 360 ]
+            [
+              let AOrientation spin ARot Qa ANorm
+              set x array:item AOrientation 2 * 10
+              set y array:item AOrientation 3 * 10
+              set z array:item AOrientation 4 * 10
+              ask pA with [did = 10] [hatch 1 [set did 999 set pid w setxyz x y z set heading simstrike set roll simdip show-turtle]]
+              ask pA with [did = 11] [hatch 1 [set did 999 set pid w setxyz x y z set heading simstrike set roll simdip show-turtle]]
+              array:set A 0 x
+              array:set A 1 y
+              array:set A 2 z
+              array:set A 3 0
+
+              set x array:item AOrientation 2 * 40
+              set y array:item AOrientation 3 * 40
+              set z array:item AOrientation 4 * 40
+              ask pB with [did = 200] [hatch 1 [set did 999 set pid w setxyz x y z set heading Finstrike set roll Findip show-turtle]]
+              ask pB with [did = 201] [hatch 1 [set did 999 set pid w setxyz x y z set heading Finstrike set roll Findip show-turtle]]
+              array:set B 0 x
+              array:set B 1 y
+              array:set B 2 z
+              array:set B 3 Rotation
+
+
+
+  ; make intermediate points
+  ; pdata is a global data agentset with did = 500
+  ; symbolized as small red dots
+
+ask data with [did = 1000][
+
+   let t 0
+
+
+    while [t <= 1 ]
+  [
+
+     array:set P 0 ((1 - t) * array:item A 0) + (t * (array:item B 0))
+     array:set P 1 ((1 - t) * array:item A 1) + (t * (array:item B 1))
+     array:set P 2 ((1 - t) * array:item A 2) + (t * (array:item B 2))
+     array:set P 3 ((1 - t) * array:item A 3) + (t * (array:item B 3))
+     let PRot array:item P 3
+
+     ; Call the spin routine to do a single increment
+     let POrientation spin PRot V Norm
+     array:set P 4 array:item POrientation 0
+     array:set P 5 array:item POrientation 1
+
+     set x array:item P 0
+     set y array:item P 1
+     set z array:item P 2
+     setxyz x y z show-turtle
+     ask pdata with [did = 500] [hatch 1 [set did 999 setxyz x y z set heading array:item P 4 set roll array:item P 5 show-turtle]]
+     ask pdata with [did = 501] [hatch 1 [set did 999 setxyz x y z set heading array:item P 4 set roll array:item P 5 show-turtle]]
+
+     set t t + .05
+
+  ]
+
+  ]
+              set w w + 1
+              set ARot ARot + arc
+            ]
+
+]
+
+
+
+
+
+
+
+
+  ; rotate the bedding symbol with t paramiter going from 0 to 1 every 10 model units
+
+  ; implement distance tracking
+
+
+end
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+@#$#@#$#@
+GRAPHICS-WINDOW
+0
+0
+245
+132
+-1
+-1
+1.0
+1
+10
+1
+1
+1
+0
+1
+1
+1
+-50
+50
+-50
+50
+-50
+50
+1
+0
+1
+ticks
+30.0
+
+TEXTBOX
+113
+31
+344
+83
+Planar Fabric Rotator
+20
+0.0
+1
+
+TEXTBOX
+56
+86
+206
+104
+Axis of Rotation
+14
+0.0
+1
+
+TEXTBOX
+50
+202
+200
+220
+Planar Orientation
+14
+0.0
+1
+
+SLIDER
+23
+109
+195
+142
+Trend
+Trend
+0
+360
+360.0
+1
+1
+NIL
+HORIZONTAL
+
+SLIDER
+24
+155
+196
+188
+Plunge
+Plunge
+-90
+90
+90.0
+1
+1
+NIL
+HORIZONTAL
+
+SLIDER
+23
+224
+195
+257
+Strike
+Strike
+0
+360
+0.0
+1
+1
+NIL
+HORIZONTAL
+
+SLIDER
+24
+268
+196
+301
+Dip
+Dip
+0
+90
+90.0
+1
+1
+NIL
+HORIZONTAL
+
+SWITCH
+46
+313
+164
+346
+overturned
+overturned
+0
+1
+-1000
+
+SLIDER
+229
+193
+435
+226
+Rotation
+Rotation
+-1000
+1000
+372.0
+1
+1
+NIL
+HORIZONTAL
+
+BUTTON
+280
+138
+358
+171
+NIL
+Simulate
+T
+1
+T
+OBSERVER
+NIL
+NIL
+NIL
+NIL
+1
+
+BUTTON
+281
+90
+359
+125
+NIL
+setup
+NIL
+1
+T
+OBSERVER
+NIL
+NIL
+NIL
+NIL
+1
+
+SWITCH
+377
+141
+489
+174
+ShowData
+ShowData
+0
+1
+-1000
+
+CHOOSER
+254
+246
+424
+291
+Demo
+Demo
+"Horizontal Line" "Horizontal Radials"
+1
+
+@#$#@#$#@
+## WHAT IS IT?
+
+(a general understanding of what the model is trying to show or explain)
+
+## HOW IT WORKS
+
+(what rules the agents use to create the overall behavior of the model)
+
+## HOW TO USE IT
+
+(how to use the model, including a description of each of the items in the Interface tab)
+
+## THINGS TO NOTICE
+
+(suggested things for the user to notice while running the model)
+
+## THINGS TO TRY
+
+(suggested things for the user to try to do (move sliders, switches, etc.) with the model)
+
+## EXTENDING THE MODEL
+
+(suggested things to add or change in the Code tab to make the model more complicated, detailed, accurate, etc.)
+
+## NETLOGO FEATURES
+
+(interesting or unusual features of NetLogo that the model uses, particularly in the Code tab; or where workarounds were needed for missing features)
+
+## RELATED MODELS
+
+(models in the NetLogo Models Library and elsewhere which are of related interest)
+
+## CREDITS AND REFERENCES
+
+(a reference to the model's URL on the web if it has one, as well as any other necessary credits, citations, and links)
+@#$#@#$#@
+default
+true
+0
+Polygon -7500403 true true 150 5 40 250 150 205 260 250
+
+airplane
+true
+0
+Polygon -7500403 true true 150 0 135 15 120 60 120 105 15 165 15 195 120 180 135 240 105 270 120 285 150 270 180 285 210 270 165 240 180 180 285 195 285 165 180 105 180 60 165 15
+
+arrow
+true
+0
+Polygon -7500403 true true 150 0 0 150 105 150 105 293 195 293 195 150 300 150
+
+box
+false
+0
+Polygon -7500403 true true 150 285 285 225 285 75 150 135
+Polygon -7500403 true true 150 135 15 75 150 15 285 75
+Polygon -7500403 true true 15 75 15 225 150 285 150 135
+Line -16777216 false 150 285 150 135
+Line -16777216 false 150 135 15 75
+Line -16777216 false 150 135 285 75
+
+bug
+true
+0
+Circle -7500403 true true 96 182 108
+Circle -7500403 true true 110 127 80
+Circle -7500403 true true 110 75 80
+Line -7500403 true 150 100 80 30
+Line -7500403 true 150 100 220 30
+
+butterfly
+true
+0
+Polygon -7500403 true true 150 165 209 199 225 225 225 255 195 270 165 255 150 240
+Polygon -7500403 true true 150 165 89 198 75 225 75 255 105 270 135 255 150 240
+Polygon -7500403 true true 139 148 100 105 55 90 25 90 10 105 10 135 25 180 40 195 85 194 139 163
+Polygon -7500403 true true 162 150 200 105 245 90 275 90 290 105 290 135 275 180 260 195 215 195 162 165
+Polygon -16777216 true false 150 255 135 225 120 150 135 120 150 105 165 120 180 150 165 225
+Circle -16777216 true false 135 90 30
+Line -16777216 false 150 105 195 60
+Line -16777216 false 150 105 105 60
+
+car
+false
+0
+Polygon -7500403 true true 300 180 279 164 261 144 240 135 226 132 213 106 203 84 185 63 159 50 135 50 75 60 0 150 0 165 0 225 300 225 300 180
+Circle -16777216 true false 180 180 90
+Circle -16777216 true false 30 180 90
+Polygon -16777216 true false 162 80 132 78 134 135 209 135 194 105 189 96 180 89
+Circle -7500403 true true 47 195 58
+Circle -7500403 true true 195 195 58
+
+circle
+false
+0
+Circle -7500403 true true 0 0 300
+
+circle 2
+false
+0
+Circle -7500403 true true 0 0 300
+Circle -16777216 true false 30 30 240
+
+cow
+false
+0
+Polygon -7500403 true true 200 193 197 249 179 249 177 196 166 187 140 189 93 191 78 179 72 211 49 209 48 181 37 149 25 120 25 89 45 72 103 84 179 75 198 76 252 64 272 81 293 103 285 121 255 121 242 118 224 167
+Polygon -7500403 true true 73 210 86 251 62 249 48 208
+Polygon -7500403 true true 25 114 16 195 9 204 23 213 25 200 39 123
+
+cylinder
+false
+0
+Circle -7500403 true true 0 0 300
+
+dot
+false
+0
+Circle -7500403 true true 90 90 120
+
+face happy
+false
+0
+Circle -7500403 true true 8 8 285
+Circle -16777216 true false 60 75 60
+Circle -16777216 true false 180 75 60
+Polygon -16777216 true false 150 255 90 239 62 213 47 191 67 179 90 203 109 218 150 225 192 218 210 203 227 181 251 194 236 217 212 240
+
+face neutral
+false
+0
+Circle -7500403 true true 8 7 285
+Circle -16777216 true false 60 75 60
+Circle -16777216 true false 180 75 60
+Rectangle -16777216 true false 60 195 240 225
+
+face sad
+false
+0
+Circle -7500403 true true 8 8 285
+Circle -16777216 true false 60 75 60
+Circle -16777216 true false 180 75 60
+Polygon -16777216 true false 150 168 90 184 62 210 47 232 67 244 90 220 109 205 150 198 192 205 210 220 227 242 251 229 236 206 212 183
+
+fish
+false
+0
+Polygon -1 true false 44 131 21 87 15 86 0 120 15 150 0 180 13 214 20 212 45 166
+Polygon -1 true false 135 195 119 235 95 218 76 210 46 204 60 165
+Polygon -1 true false 75 45 83 77 71 103 86 114 166 78 135 60
+Polygon -7500403 true true 30 136 151 77 226 81 280 119 292 146 292 160 287 170 270 195 195 210 151 212 30 166
+Circle -16777216 true false 215 106 30
+
+flag
+false
+0
+Rectangle -7500403 true true 60 15 75 300
+Polygon -7500403 true true 90 150 270 90 90 30
+Line -7500403 true 75 135 90 135
+Line -7500403 true 75 45 90 45
+
+flower
+false
+0
+Polygon -10899396 true false 135 120 165 165 180 210 180 240 150 300 165 300 195 240 195 195 165 135
+Circle -7500403 true true 85 132 38
+Circle -7500403 true true 130 147 38
+Circle -7500403 true true 192 85 38
+Circle -7500403 true true 85 40 38
+Circle -7500403 true true 177 40 38
+Circle -7500403 true true 177 132 38
+Circle -7500403 true true 70 85 38
+Circle -7500403 true true 130 25 38
+Circle -7500403 true true 96 51 108
+Circle -16777216 true false 113 68 74
+Polygon -10899396 true false 189 233 219 188 249 173 279 188 234 218
+Polygon -10899396 true false 180 255 150 210 105 210 75 240 135 240
+
+house
+false
+0
+Rectangle -7500403 true true 45 120 255 285
+Rectangle -16777216 true false 120 210 180 285
+Polygon -7500403 true true 15 120 150 15 285 120
+Line -16777216 false 30 120 270 120
+
+leaf
+false
+0
+Polygon -7500403 true true 150 210 135 195 120 210 60 210 30 195 60 180 60 165 15 135 30 120 15 105 40 104 45 90 60 90 90 105 105 120 120 120 105 60 120 60 135 30 150 15 165 30 180 60 195 60 180 120 195 120 210 105 240 90 255 90 263 104 285 105 270 120 285 135 240 165 240 180 270 195 240 210 180 210 165 195
+Polygon -7500403 true true 135 195 135 240 120 255 105 255 105 285 135 285 165 240 165 195
+
+line
+true
+0
+Line -7500403 true 150 0 150 300
+
+line half
+true
+0
+Line -7500403 true 150 0 150 150
+
+pentagon
+false
+0
+Polygon -7500403 true true 150 15 15 120 60 285 240 285 285 120
+
+person
+false
+0
+Circle -7500403 true true 110 5 80
+Polygon -7500403 true true 105 90 120 195 90 285 105 300 135 300 150 225 165 300 195 300 210 285 180 195 195 90
+Rectangle -7500403 true true 127 79 172 94
+Polygon -7500403 true true 195 90 240 150 225 180 165 105
+Polygon -7500403 true true 105 90 60 150 75 180 135 105
+
+plant
+false
+0
+Rectangle -7500403 true true 135 90 165 300
+Polygon -7500403 true true 135 255 90 210 45 195 75 255 135 285
+Polygon -7500403 true true 165 255 210 210 255 195 225 255 165 285
+Polygon -7500403 true true 135 180 90 135 45 120 75 180 135 210
+Polygon -7500403 true true 165 180 165 210 225 180 255 120 210 135
+Polygon -7500403 true true 135 105 90 60 45 45 75 105 135 135
+Polygon -7500403 true true 165 105 165 135 225 105 255 45 210 60
+Polygon -7500403 true true 135 90 120 45 150 15 180 45 165 90
+
+sheep
+false
+15
+Circle -1 true true 203 65 88
+Circle -1 true true 70 65 162
+Circle -1 true true 150 105 120
+Polygon -7500403 true false 218 120 240 165 255 165 278 120
+Circle -7500403 true false 214 72 67
+Rectangle -1 true true 164 223 179 298
+Polygon -1 true true 45 285 30 285 30 240 15 195 45 210
+Circle -1 true true 3 83 150
+Rectangle -1 true true 65 221 80 296
+Polygon -1 true true 195 285 210 285 210 240 240 210 195 210
+Polygon -7500403 true false 276 85 285 105 302 99 294 83
+Polygon -7500403 true false 219 85 210 105 193 99 201 83
+
+square
+false
+0
+Rectangle -7500403 true true 30 30 270 270
+
+square 2
+false
+0
+Rectangle -7500403 true true 30 30 270 270
+Rectangle -16777216 true false 60 60 240 240
+
+square2
+true
+0
+
+square3
+true
+0
+
+star
+false
+0
+Polygon -7500403 true true 151 1 185 108 298 108 207 175 242 282 151 216 59 282 94 175 3 108 116 108
+
+tablet
+true
+4
+Rectangle -1184463 true true 60 105 240 195
+
+tabletbase3d
+true
+1
+
+tablettop3d
+true
+4
+
+target
+false
+0
+Circle -7500403 true true 0 0 300
+Circle -16777216 true false 30 30 240
+Circle -7500403 true true 60 60 180
+Circle -16777216 true false 90 90 120
+Circle -7500403 true true 120 120 60
+
+tree
+false
+0
+Circle -7500403 true true 118 3 94
+Rectangle -6459832 true false 120 195 180 300
+Circle -7500403 true true 65 21 108
+Circle -7500403 true true 116 41 127
+Circle -7500403 true true 45 90 120
+Circle -7500403 true true 104 74 152
+
+triangle
+false
+0
+Polygon -7500403 true true 150 30 15 255 285 255
+
+triangle 2
+false
+0
+Polygon -7500403 true true 150 30 15 255 285 255
+Polygon -16777216 true false 151 99 225 223 75 224
+
+truck
+false
+0
+Rectangle -7500403 true true 4 45 195 187
+Polygon -7500403 true true 296 193 296 150 259 134 244 104 208 104 207 194
+Rectangle -1 true false 195 60 195 105
+Polygon -16777216 true false 238 112 252 141 219 141 218 112
+Circle -16777216 true false 234 174 42
+Rectangle -7500403 true true 181 185 214 194
+Circle -16777216 true false 144 174 42
+Circle -16777216 true false 24 174 42
+Circle -7500403 false true 24 174 42
+Circle -7500403 false true 144 174 42
+Circle -7500403 false true 234 174 42
+
+turtle
+true
+0
+Polygon -10899396 true false 215 204 240 233 246 254 228 266 215 252 193 210
+Polygon -10899396 true false 195 90 225 75 245 75 260 89 269 108 261 124 240 105 225 105 210 105
+Polygon -10899396 true false 105 90 75 75 55 75 40 89 31 108 39 124 60 105 75 105 90 105
+Polygon -10899396 true false 132 85 134 64 107 51 108 17 150 2 192 18 192 52 169 65 172 87
+Polygon -10899396 true false 85 204 60 233 54 254 72 266 85 252 107 210
+Polygon -7500403 true true 119 75 179 75 209 101 224 135 220 225 175 261 128 261 81 224 74 135 88 99
+
+wheel
+false
+0
+Circle -7500403 true true 3 3 294
+Circle -16777216 true false 30 30 240
+Line -7500403 true 150 285 150 15
+Line -7500403 true 15 150 285 150
+Circle -7500403 true true 120 120 60
+Line -7500403 true 216 40 79 269
+Line -7500403 true 40 84 269 221
+Line -7500403 true 40 216 269 79
+Line -7500403 true 84 40 221 269
+
+wolf
+false
+0
+Polygon -16777216 true false 253 133 245 131 245 133
+Polygon -7500403 true true 2 194 13 197 30 191 38 193 38 205 20 226 20 257 27 265 38 266 40 260 31 253 31 230 60 206 68 198 75 209 66 228 65 243 82 261 84 268 100 267 103 261 77 239 79 231 100 207 98 196 119 201 143 202 160 195 166 210 172 213 173 238 167 251 160 248 154 265 169 264 178 247 186 240 198 260 200 271 217 271 219 262 207 258 195 230 192 198 210 184 227 164 242 144 259 145 284 151 277 141 293 140 299 134 297 127 273 119 270 105
+Polygon -7500403 true true -1 195 14 180 36 166 40 153 53 140 82 131 134 133 159 126 188 115 227 108 236 102 238 98 268 86 269 92 281 87 269 103 269 113
+
+x
+false
+0
+Polygon -7500403 true true 270 75 225 30 30 225 75 270
+Polygon -7500403 true true 30 75 75 30 270 225 225 270
+@#$#@#$#@
+NetLogo 3D 6.0
+@#$#@#$#@
+@#$#@#$#@
+@#$#@#$#@
+@#$#@#$#@
+@#$#@#$#@
+default
+0.0
+-0.2 0 0.0 1.0
+0.0 1 1.0 0.0
+0.2 0 0.0 1.0
+link direction
+true
+0
+Line -7500403 true 150 150 90 180
+Line -7500403 true 150 150 210 180
+@#$#@#$#@
+0
+@#$#@#$#@
