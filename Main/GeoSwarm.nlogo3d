@@ -1,0 +1,3962 @@
+;Program:  GeoSwarm.nlogo3d
+;
+; Description: An application to demonstrate agent based modelling approach for surface estimation from sparse local spatial and orientation constraints.
+;
+; Author: Eric A. de Kemp - GSC, Ottawa, Canada, 2020
+;
+; Date:   June 8,  2020  Attraction behavior adjusted to bring agents better to the data.
+;         May  22, 2020 Membrian Option included updated file input settings such as topology = 0 (On-Surface)
+;         Dec.  1, 2019 Established Swarming with surface cohesion through orientation convergence
+;         Nov. 30, 2019 Convergence and isometric cohesion done, many bug fixes, nested neighbourhood cohesion abandoned
+;         Nov. 27, 2019 Still no good rule for establishing STRONG local cohesion
+;         Oct.  3, 2019 Last month spent trying to get proper cohesion of a continuous surface of agents
+;         Sept, 5, 2019 Start of Code writting. Many proceedures adapted or directly applied from previous Swarm codes of EdK.
+;
+;
+; Modifications: As noted in code.
+;
+;
+; Outstanding Issues:  Need new algorithm and rule for strong local cohesion (done)
+;                      General lack of clarity on how myself and self are accessed (work around explicit setting of current agents)
+;                      Help docs from netlogo and recent training material could add this information.
+;                      Optimize sensor procedure for better reflections.(done)
+;
+;
+;
+; Proceedures:
+;
+;
+; References:
+;
+; 1.
+;
+; Notes:
+;
+;## HOW IT WORKS
+;
+; A particle set is given a random 3D location, axis of rotation equivalent to a surface normal.
+;
+; Each particle becomes preferentially attracted to its closest neighbour in a planar direction.
+;
+; Each particle manintains a minimal distance to its neighbour
+;
+; Each particle is repelled with the greatest force in the direction away from the particle equator.
+;
+;
+; Will a single surface emerge?
+;
+
+extensions [ array matrix ]
+
+
+
+; Declare the global variables
+globals [working tester x y z Norm flat-dist Nx Ny Nz rad Control-data active-data Far-data active-agent friends closest-sim closest-data closest-neighbour Swarm Swarm-mates EVs EV1 EV2 EV3 Aliens BC]
+
+; Make the agents
+breed [data observation]
+
+
+; Set the agent properties (id = agent identifier, natural integer value=1,2,3,4,5,6.... )
+data-own [ did dtype state geom topol dist2closest D2C D2Sim clusterID neighbours ABC dstrike ddip doverturned n1 n2 n3 qqw qqx qqy qqz weight estimated symbol]
+
+         ;           did  = data ID
+         ;         dtype  = data type ::
+         ;              0 = reference site locaiton
+         ;              1 = On-contact only observation point (see property topol for condition topol = 0, on-contact)
+         ;              2 = On-contact with  undirected planar orientation observation point
+         ;              3 = On-contact with directed planar orientation observation
+         ;              4 = Off-contact with undirected planar orientation observation point
+         ;              5 = Off-contact directed planar oreintation observation point
+         ;              6 = Off-contact topology control point (see property topol for condition)
+         ;                (directed planar means top direction indicated AND overturned property set to -1,1,0)
+         ;              7 = Off-contact with undirected planar orientation observation AND topologic position point
+         ;              8 = Off-contact with directed planar orientation observation AND topologic position point
+         ;          state = behavior state of agent, false = out of range, true = in range interogating,
+         ;                  0 = fixed not moving location or orientation, 1 = fixed location but rotating orientation
+         ;                  2 = moving location but fixed dip, 3 = moving loction and moving orientation,
+         ;                  4 = bonded with its neighbours but moving loction and moving orientation as a collective,
+         ;                 -1 = undergoing transformation
+         ;           geom = structural geometry exists true/false
+         ;          topol = topology of location (-1 = below or inside, 0 = on-contact, 1 = above or outside feature, false = unkown)
+         ;            D2C = Distance of agent to centre of model
+         ;   dist2closest = distance to my closest neighbour
+         ;          D2Sim = distance to closest simulation estimator
+         ;      clusterID = local ID define neighbour members at a specific cut off default is a 5 unit 3D distance , -99999 = unknown
+         ;     neighbours = list of data agents in close proximity to me, could default to 2 closest to form a triplet OR nobody
+         ;           ABC  = Barycentre associated with this agent, stored as the BC who number
+         ;       dstrike  = RHR structure info strike = 0-360 degrees,  -99999 = unknown
+         ;           ddip = dip ::
+         ;           0-90 = degrees
+         ;         -99999 = unknown
+         ;    doverturned = polarity of top direction :: temporarily set to true or false
+         ;              0 = upright
+         ;              1 = overturned
+         ;             -1 = unknown
+         ;       n1,n2,n3 = normal direction cosine components (normalized from -1 to +1)
+         ;qqw,qqx,qqy,qqz = Quaternion 4 components (rotational angle, vector of rotation)
+         ;         weight = weight assigned for computational purposes
+         ;      estimated = colocated sim eagent exist (true or false)
+         ;         symbol = a 4 point co-located symbolization (true or false)
+
+
+
+  ; Load the bedding shape descriptions
+  ; See ascii text file  3d_HexShape.txt for object defination using 4 seperate 3D shape definitions
+  ; Important to note that the shape file will only allow a single geometry type per shape such as quads OR tris for 3D rectangles and 3D triangles
+  ; vertices in each patch needed to be named only once and in clockwise fashion looking down the associated normal. Each patch mush be defined twice for
+  ; the 2 sides of the opposite normal.
+  ; Note the sims agent is a composite of 4 points centered at the active search site. This is to facilitate symbolization of the directed 3D hexagonal slabs
+
+
+; Links between sims and data
+
+directed-link-breed [Data_links Data_link]
+
+Data_links-own
+[
+Data_ID        ; Data link type 0 = On surface
+]
+
+
+
+
+
+;;;;                            DATA SETUP
+
+to setup  ; an observer based setup
+  ;; (for this model to work with NetLogo's new plotting features,
+  ;; __clear-all-and-reset-ticks should be replaced with clear-all at
+  ;; the beginning of your setup procedure and reset-ticks at the end
+  ;; of the procedure.)
+  __clear-all-and-reset-ticks
+
+  orbit-down 0
+  orbit-left 0
+
+; Set global variables
+
+set x 0
+set y 0
+set z 0
+set Nx 0
+set Ny 0
+set Nz 0
+set Norm array:from-list [0 0 0]
+set tester nobody
+set Control-data nobody
+set active-data nobody
+set active-agent nobody
+set friends nobody
+set Swarm nobody
+set Swarm-mates nobody
+set BC nobody ; Barycentre
+set Aliens nobody ; Agents outside the membership criteria
+
+
+set rad 57.2958 ; Degrees to Radians conversion factor 1 Radian = 57.2958 Degrees (pi * rad = 180 degrees)
+set closest-neighbour nobody ; could be a control point or an estimator sim
+set closest-sim nobody
+set closest-data nobody
+
+set EVs matrix:from-row-list [[0 0 0][0 0 0][0 0 0]]
+set EV1 array:from-list [0 0 0]
+set EV2 array:from-list [0 0 0]
+set EV3 array:from-list [0 0 0]
+
+
+load-shapes-3d "3d_HexShape.txt"
+
+
+; Create the agents
+
+
+
+let s 1
+let r 1
+set working false
+while [s <= (SwarmSize + Data-points) ]
+
+        [
+
+          create-data 1 [
+                    set did who set dtype 3 set state 3 set geom true
+                    set xcor x set ycor y set zcor z set size simsize
+                    set shape "circle" set color white set symbol false
+                    ; random parameter
+                    let tx random-float 1
+                    let ty random-float 1
+                    let tz random-float 1
+                    let tn1 random-float 1
+                    let tn2 random-float 1
+                    let tn3 random-float 1
+                    ;  random position
+                    let A min-pxcor
+                    let B max-pxcor
+                    set xcor linear tx A B
+                    set A min-pycor
+                    set B max-pycor
+                    set ycor linear ty A B
+                    set A min-pzcor
+                    set B max-pzcor
+                    set zcor linear tz A B
+                    ; random axis
+                    set n1 linear tn1 -1 1
+                    set n2 linear tn2 -1 1
+                    set n3 linear tn3 -1 1
+                    ; type "Normal " type n1 type " " type n2 type " " type n3 type "\n"
+                    ; convert to strike, dip, overturned, quaternions
+                    ; Assume rotation axis = Normal to bedding
+                    ; and rotation = 0
+                    let N array:from-list (list n1 n2 n3)
+                    let G array:from-list (list n1 n2 n3)
+                    ; set geometry properties
+                    let orientation spin 0 N G
+                    set dstrike array:item orientation 0
+                    set ddip array:item orientation 1
+                    set n1 array:item orientation 2
+                    set n2 array:item orientation 3
+                    set n3 array:item orientation 4
+                    set doverturned array:item orientation 5
+                    set qqx array:item orientation 6
+                    set qqy array:item orientation 7
+                    set qqz array:item orientation 8
+                    set qqw array:item orientation 9
+                    set geom true
+                    set topol false
+                    ; calculate distance to centre of model
+                    set D2C distancexyz-nowrap 0 0 0
+                    set D2Sim 1000
+                    set dist2closest 1000
+                    set ABC nobody
+                    set pitch 0
+                    set heading dstrike
+                    set roll ddip
+                  ]
+
+        set s s + 1
+       ]
+
+  ; Set control data if specified
+  while [r <= Data-points] [ ask one-of data with [state = 3 and symbol = false ] [ set state 0  set topol 0 set size simsize * 2]  set r r + 1]
+
+
+
+ set Control-data data with [state = 0 and topol = 0 ]
+
+ ; symbolize each control data point with orientation symbology
+ ask Control-data [hatch-data 4 [ set symbol false hide-turtle]
+  ask one-of data with [(did = [did] of myself) and (state = 0) and (symbol = false)] [set symbol true set shape "hextop3d" set color cyan ]
+  ask one-of data with [(did = [did] of myself) and (state = 0) and (symbol = false)] [set symbol true set shape "hextopsides3d" set color cyan ]
+  ask one-of data with [(did = [did] of myself) and (state = 0) and (symbol = false)] [set symbol true set shape "hexbase3d" set color red ]
+  ask one-of data with [(did = [did] of myself) and (state = 0) and (symbol = false)] [set symbol true set shape "hexbasesides3d" set color red ]
+           hide-turtle]
+
+
+
+
+  ; symbolize each interogation agent (particle)
+  ask data with [state = 3 ][hatch-data 4 [  set state -1 set size simsize set symbol false hide-turtle]
+  ask one-of data with [(did = [did] of myself) and (state = -1)] [set state 3 set symbol true set shape "hextop3d" set color yellow ]
+  ask one-of data with [(did = [did] of myself) and (state = -1)] [set state 3 set symbol true set shape "hextopsides3d" set color yellow ]
+  ask one-of data with [(did = [did] of myself) and (state = -1)] [set state 3 set symbol true set shape "hexbase3d" set color green ]
+  ask one-of data with [(did = [did] of myself) and (state = -1)] [set state 3 set symbol true set shape "hexbasesides3d" set color green ]
+           ]
+
+
+
+ if (Mode =  "Particles") [ ask data with [symbol = true or state = 0] [hide-turtle]
+                            ask data with [symbol = false] [set size SimSize * 5] ]
+
+ if (Mode =  "Structure")  [
+
+   ; Load a geological data test case from an ascii file
+    if (Test-File != "No-File") [ load-data ]
+
+
+    ; Calculate Eigenvectors and Eigenvalues
+    let Eigens Eigenanalysis
+
+
+
+
+
+    ask data with [symbol = true and state = 0] [ set size SimSize * .5  show-turtle]
+                                 ask data with [symbol = true and state = 3] [set size SimSize * .5 show-turtle]
+                                 ask data with [symbol = false] [set size SimSize * 2 show-turtle] ]
+
+
+
+
+
+  ifelse (Symbolize = true)
+                                    [ask data with [symbol = true and state = 3] [set size simsize * .5 show-turtle]
+                                     ask data with [symbol = true and state = 0] [set size simsize * .5 show-turtle]
+                                     ask data with [symbol = false ] [set size simsize * 2 show-turtle]
+                                    ]
+                                    [ask data with [symbol = true and state = 3] [hide-turtle]
+                                     ask data with [symbol = true and state = 0] [hide-turtle]
+
+                                    ]
+
+
+
+end ; End of setup
+
+; Eigenanalysis
+to-report Eigenanalysis
+
+; Method for setting up data matrix of normals to planes in space
+
+; Does not work needs literal values
+;Set the empty data matrix as default if no dip data exists, use a row-nested list
+let dataNlist matrix:from-row-list (list [ 0 0 0 ] [ 0 0 0 ])
+; Example of working list for gathering multi-properties of an agentset
+;let dataNlist [(list n1 n2 n3)] of data with [dtype = 5 ]
+  ifelse (count data with [dtype = 3 and state = 0] != 0) [set dataNlist matrix:from-row-list [(list n1 n2 n3)] of data with [ dtype = 3 and state = 0 and symbol = false]]
+  [
+    set dataNlist matrix:from-row-list [[0 1 0]]   ]
+
+
+let ObsNorms dataNlist
+print "\n     Start of Orientation Analysis        \n\n"
+
+print "\n              The Observation Data matrix  ...\n"
+
+print matrix:pretty-print-text ObsNorms
+
+let OM OrientationMatrix ObsNorms
+
+print "\n              The Orientation Matrix  ...\n"
+
+print matrix:pretty-print-text OM
+
+set EVs EigenVector OM
+let EVals matrix:real-eigenvalues OM
+let EValues array:from-list EVals
+
+type " \n\n                  Eigen vector results : \n\n  "  type matrix:pretty-print-text EVs type     " \n"
+let E1l matrix:get-column EVs 0
+let E2l matrix:get-column EVs 1
+let E3l matrix:get-column EVs 2
+
+set EV1 array:from-list E1l
+set EV2 array:from-list E2l
+set EV3 array:from-list E3l
+
+; Test for UNIT Normals
+
+let E1size sqrt(array:item EV1 0 ^ 2 + array:item EV1 1 ^ 2 + array:item EV1 2 ^ 2)
+let E2size sqrt(array:item EV2 0 ^ 2 + array:item EV2 1 ^ 2 + array:item EV2 2 ^ 2)
+let E3size sqrt(array:item EV3 0 ^ 2 + array:item EV3 1 ^ 2 + array:item EV3 2 ^ 2)
+
+array:set EV1 0  array:item EV1 0 / E1size
+array:set EV1 1  array:item EV1 1 / E1size
+array:set EV1 2  array:item EV1 2 / E1size
+
+array:set EV2 0  array:item EV2 0 / E2size
+array:set EV2 1  array:item EV2 1 / E2size
+array:set EV2 2  array:item EV2 2 / E2size
+
+array:set EV3 0  array:item EV3 0 / E3size
+array:set EV3 1  array:item EV3 1 / E3size
+array:set EV3 2  array:item EV3 2 / E3size
+
+
+
+
+;Plot the Eigen Vectors
+;let sEVals array:from-list [0 0 0]
+let sEV 10 ; to magnify the Eigen Vector and then use the scaling from the Eigen values
+;let sE1 sEV * ( 1 + array:item EValues 0)
+;let sE2 sEV * ( 1 / array:item EValues 1)
+;let sE3 sEV * ( 1 / array:item EValues 2)
+;array:set sEVals 0 sE1
+;array:set sEVals 1 sE2
+;array:set sEVals 2 sE3
+
+
+
+; No scaling effect from Eigen Values
+ let sE1 1
+ let sE2 1
+ let sE3 1
+
+
+type "\n       Size EV1 EV2 EV3 : " type E1size type " " type E2size type " " type E3size type "  \n\n "
+type "Eigen Values E1 E2 E3  : " type EVals type "  \n "
+
+
+;type "\n       Scaled Sizes sE1 sE2 sE3  : " type sE1 type " " type sE2 type " " type sE3 type "  \n\n "
+;type "Scaled Eigen Values E1 E2 E3  : " type sEVals type "  \n "
+
+
+type "Norm : " type Norm  type " \n"
+Type "   EV1  "  type EV1  type " \n"Type "   EV2  "  type EV2  type " \n"Type "   EV3  "  type EV3  type "  \n\n"
+
+
+
+
+
+create-data 6 [set did -100 set dtype 0 set shape "circle" set size 0 set color gray setxyz 0 0 0]
+let EV1a one-of data with [did = -100 and dtype = 0] ask EV1a [set dtype 1  ]
+
+let EV2a one-of data with [did = -100 and dtype = 0] ask EV2a [set dtype 1 ]
+
+let EV3a one-of data with [did = -100 and dtype = 0] ask EV3a [set dtype 1 ]
+
+let EV1b one-of data with [did = -100 and dtype = 0]
+ask EV1b  [set dtype 1 set size 2 set color red set xcor sEV * sE1 * array:item EV1 0 set ycor sEV * sE1 * array:item EV1 1 set zcor sEV * sE1 * array:item EV1 2]
+ask EV1a [create-link-to EV1b [set color red]]
+
+let EV2b one-of data with [did = -100 and dtype = 0]
+ask EV2b  [set dtype 1 set size 2 set color green set xcor sEV * sE2 * array:item EV2 0 set ycor sEV * sE2 *  array:item EV2 1 set zcor sEV * sE2 * array:item EV2 2]
+ask EV2a [create-link-to EV2b [set color green]]
+
+let EV3b one-of data with [did = -100 and dtype = 0]
+ask EV3b  [set dtype 1 set size 2 set color blue set xcor sEV * sE3 * array:item EV3 0 set ycor sEV * sE3 * array:item EV3 1 set zcor sEV * sE3 * array:item EV3 2]
+ask EV3a [create-link-to EV3b [set color blue]]
+
+  report EV3
+end ; end of Eigenanalysis
+
+
+
+
+
+
+to load-data
+
+ ; Open the file and get the number of data lines
+ ;
+  let in-file ""
+ if (Test-File = "A1") [set in-file "./Caop_Data_01.txt"]
+ if (Test-File = "A2") [set in-file "./Caop_Data_02.txt"]
+ if (Test-File = "A3") [set in-file "./Caop_Data_03.txt"]
+ if (Test-File = "A4") [set in-file "./Caop_Data_04.txt"]
+ if (Test-File = "") [set in-file ""]
+   ;Read in all the data in the file
+   ;data on the line is in this order:
+   ; x y z n1 n2 n3
+   let data-row array:from-list [0 0 0 0 0 0]
+   let DM-dim [0 0]
+   let l 0 ; input line number and incrementor
+   let m 0 ; Data agent ID incrementor
+   let k 0 ; Dat Matrix row incrementor
+   let nc 0 ; Data column incrementor
+   let buffer 0.25 ; percent of added data range
+
+
+   ; Kill all pre-existing control data and the symbolization
+   ask data with [state = 0 and topol = 0 ] [die]
+
+   ; Bring in new geological test file
+
+   ; Open the file and get the number of data lines
+
+   file-open in-file
+
+  ; Determine data size
+   while [not file-at-end?]
+         [
+          set l l + 1 ;
+          ;; this reads a single line into a six-item list
+          set data-row read-from-string (word "[" file-read-line "]")
+         ]
+   file-close
+
+   ;; This re-opens the file, so we can use it.
+
+   file-open in-file
+
+
+
+
+
+
+  let DM matrix:make-constant l 6 0
+  set l 0
+
+
+  while [not file-at-end?]
+        [
+
+        ;; this reads a single line into a six-item list
+        set data-row read-from-string (word "[" file-read-line "]")
+        matrix:set-row DM l data-row
+
+        set l l + 1 ;
+
+       ]
+       file-close
+
+
+
+
+type  "Incoming data : \n\n"
+ print matrix:pretty-print-text DM
+
+
+ ; Get the matrix dimensions
+ set DM-dim matrix:dimensions DM
+ set l item 0 DM-dim
+ set nc item 1 DM-dim
+
+
+
+
+ ;re-scale the x,y,z coordinates of the data to the range of model space
+ ; scale returns a simple list of indexed coordinates converted to the new model range
+
+ifelse (Scaling = true)
+
+       [
+        matrix:set-column DM 0 scale matrix:get-column DM 0 max-pxcor (min-pxcor + 50) buffer Scale-Factor
+        matrix:set-column DM 1 scale matrix:get-column DM 1 max-pycor min-pycor buffer Scale-Factor
+        matrix:set-column DM 2 scale matrix:get-column DM 2 max-pzcor (min-pzcor + 75) buffer Scale-Factor
+       ]
+       [
+        ; Do nothing just pass the data through
+       ]
+
+  type  "Re-scaled data : \n\n"
+  print matrix:pretty-print-text DM
+
+  while [m < l] [
+
+   create-data 1 [
+      set did who
+      set xcor matrix:get DM m 0
+      set ycor matrix:get DM m 1
+      set zcor matrix:get DM m 2
+      set n1 matrix:get DM m 3
+      set n2 matrix:get DM m 4
+      set n3 matrix:get DM m 5
+      set shape "circle"
+      set size 2
+      set color white
+      set dtype 3
+      set state 0
+      set topol 0
+      set symbol false
+      set Norm array:from-list (list n1 n2 n3)
+
+     ; convert to strike, dip, overturned, quaternions
+     ; Assume rotation axis = Normal to bedding
+     ; and rotation = 0
+     let N array:from-list (list n1 n2 n3)
+     let G array:from-list (list n1 n2 n3)
+     ; set geometry properties
+     let orientation spin 0 N G
+     set dstrike array:item orientation 0
+     set ddip array:item orientation 1
+     set n1 array:item orientation 2
+     set n2 array:item orientation 3
+     set n3 array:item orientation 4
+     set doverturned array:item orientation 5
+     set qqx array:item orientation 6
+     set qqy array:item orientation 7
+     set qqz array:item orientation 8
+     set qqw array:item orientation 9
+     set geom true
+     ; calculate distance to centre of model
+     set D2C distancexyz-nowrap 0 0 0
+     set ABC nobody
+     set pitch 0
+     set heading dstrike
+     set roll ddip
+      ]
+
+      ; Only fixed on-contact, dip data is used as control data here
+      set Control-data data with [state = 0 and topol = 0 and dtype = 3 and symbol = false]
+
+  ; symbolize each control data point with orientation symbology
+  ; note that hatching will dublicate the asked hatchers properties, in this case for example, dtype = 3 is passed to the new hatchlings.
+  ask Control-data [hatch-data 4 [ set symbol false hide-turtle]
+  ask one-of data with [(did = [did] of myself) and (state = 0) and (symbol = false)] [set symbol true set shape "hextop3d" set color cyan ]
+  ask one-of data with [(did = [did] of myself) and (state = 0) and (symbol = false)] [set symbol true set shape "hextopsides3d" set color cyan ]
+  ask one-of data with [(did = [did] of myself) and (state = 0) and (symbol = false)] [set symbol true set shape "hexbase3d" set color red ]
+  ask one-of data with [(did = [did] of myself) and (state = 0) and (symbol = false)] [set symbol true set shape "hexbasesides3d" set color red ]
+           show-turtle]
+  ask data with [symbol = true and topol = 0] [set size 1.25]
+
+   set m m + 1
+
+  ]
+
+
+end ; end of load-data
+
+
+
+
+; Export Agents to external file
+to write-data [export-agentset outfile-name outfile-path];
+
+  let full-file-name word outfile-path outfile-name
+type "\n" type full-file-name type "\n"
+
+file-open full-file-name
+file-close
+file-delete full-file-name
+
+
+
+
+
+file-open full-file-name
+
+
+
+
+
+; make an n x 3 matrix (record id, Data membership, Sim membership
+let Regions matrix:make-constant count export-agentset with [symbol = false and dtype = 3] 3 0
+
+file-print "GOCAD VSet 1"
+file-print "HEADER {"
+file-type word "name: "outfile-name file-type "\n"
+file-print "*regions*Data*color: red"
+file-print "*regions*Sims*color: green"
+file-print "regions: on"
+file-print "*visible*regions: on"
+file-print "*regions*Data*visible: off"
+file-print "*regions*Sims*visible: off"
+file-print "}"
+file-print "GOCAD_ORIGINAL_COORDINATE_SYSTEM"
+file-print "NAME \" gocad Local\" "
+file-print "PROJECTION Unknown"
+file-print "DATUM Unknown"
+file-print "AXIS_NAME X Y Z"
+file-print "AXIS_UNIT m m m"
+file-print "ZPOSITIVE Elevation"
+file-print "END_ORIGINAL_COORDINATE_SYSTEM"
+file-print "PROPERTIES normal"
+file-print "PROP_LEGAL_RANGES **none**  **none** "
+file-print "NO_DATA_VALUES -99999 "
+file-print "PROPERTY_CLASSES normal"
+file-print "PROPERTY_KINDS \" Real Number\""
+file-print "PROPERTY_SUBCLASSES QUANTITY Float"
+file-print "ESIZES 3"
+file-print "UNITS unitless"
+file-print "PROPERTY_CLASS_HEADER X {"
+file-print "kind: X"
+file-print "unit: m"
+file-print "}"
+file-print "PROPERTY_CLASS_HEADER Y {"
+file-print "kind: Y"
+file-print "unit: m"
+file-print "}"
+file-print "PROPERTY_CLASS_HEADER Z {"
+file-print "kind: Z"
+file-print "unit: m"
+file-print "is_z: on"
+file-print "}"
+file-print "PROPERTY_CLASS_HEADER normal {"
+file-print "kind: Real Number"
+file-print "unit: unitless"
+file-print "low_clip: -0.9901283"
+file-print "high_clip: 0.9576038"
+file-print "pclip: 99"
+file-print "}"
+
+file-print "REGION Data 0"
+file-print "REGION Sims 1"
+
+let rcount 0
+ask export-agentset
+
+  [
+
+
+if (symbol = false and dtype = 3 and state = 0) [
+     file-type "PVRTX " file-type rcount + 1 file-type " " file-write xcor file-write ycor file-write zcor file-write precision n1 5 file-write precision n2 5 file-write precision n3 5  file-print ""
+     matrix:set Regions rcount 0 rcount + 1
+     matrix:set Regions rcount 1 1
+     matrix:set Regions rcount 2 0
+     set rcount rcount + 1
+     ]
+if (symbol = false and dtype = 3 and state != 0) [
+     file-type "PVRTX " file-type rcount + 1 file-type " " file-write xcor file-write ycor file-write zcor file-write precision n1 5 file-write precision n2 5 file-write precision n3 5  file-print ""
+     matrix:set Regions rcount  0 rcount + 1
+     matrix:set Regions rcount  1 0
+     matrix:set Regions rcount  2 1
+     set rcount rcount + 1
+     ]
+
+  ]
+
+file-print "BEGIN_ATOM_REGION_INDICATORS"
+let i 0
+let mrsize count export-agentset with [symbol = false and dtype = 3]
+  while [i < mrsize    ]
+  [
+  set i i + 1
+  file-type "ARI " file-type matrix:get Regions (i - 1) 0  file-type " " file-type matrix:get Regions (i - 1) 1  file-type " " file-type matrix:get Regions (i - 1) 2  file-type " " file-type "\n"
+
+  ]
+
+file-print "END_ATOM_REGION_INDICATORS"
+file-print "END"
+file-type "\n\n\n"
+
+file-close
+
+print matrix:pretty-print-text Regions
+
+
+end  ; end of writing out the data and structural sim results
+
+to simulate
+ if (ticks >= 1000) [ reset-ticks ]
+
+if (Mode =  "Particles")
+    [
+        ask data with [symbol = true] [hide-turtle]
+        ask data with [symbol = false][
+
+            set D2C distancexyz-nowrap 0 0 0
+            ifelse (D2C >= Dist2Centre) [set state false] [set state true]
+
+            ; change the central color based on proximity to centre of model
+
+            set Swarm data with [state = true and symbol = false]
+            set Aliens data with [state = false and symbol = false]
+            ask Swarm [set color red show-turtle]
+            ask Aliens [set color blue show-turtle]
+
+             ]
+         ; If no acceptance criteria is made keep the symbology with the data agent
+
+        ask data with [symbol = false ] [forward Motion set size SimSize * 5]
+        Sensor data with [symbol = false and state != 0]
+
+      ]
+
+
+ if (Mode =  "Structure")
+    [
+
+        set Control-data data with [state = 0 and dtype = 3 and symbol = false and topol = 0]
+        set Control-data Control-data with [Distancexyz-nowrap 0 0 0 < Dist2Centre]
+        ; type "Control Data: " type Control-data type "\n"
+
+
+
+        ; Sims within the distance to centre and not yet locked in to position
+        ; Perform distance checks and clear intermediate agents
+        ;
+         if (BC != nobody) [ ask BC [die]]
+
+
+
+        ask data with [state != 0 and symbol = false] [
+            set D2C distancexyz-nowrap 0 0 0
+            ifelse (D2C <= Dist2Centre) [set state true] [set state false]
+            ; change the central color based on proximity to centre of model
+            set Swarm data with [state = true and symbol = false and state != 0]
+            set Aliens data with [state = false and symbol = false and state != 0]
+            ask Swarm [set color red show-turtle]
+            ask Aliens [set color blue show-turtle]
+        ]
+
+           ; Form a swarm of agents ready to estimate a model from data
+
+          if (any? Swarm) [
+                ask Swarm [
+                         set active-agent self set state 3
+
+                         ; find the agents I can see using distance and vision angle
+                         set Swarm-mates gathering active-agent Swarm Sight 1
+                         ; choose only the closest cellsize number of agents to me
+            if (any? Swarm-mates) [set Swarm-mates Cell Swarm-mates active-agent cellsize]
+            if (any? Swarm-mates) [
+
+
+
+                                       Swarming Swarm-mates active-agent 0
+
+                                       ;forward Motion
+                                        sensor self
+                                  ]
+                       ] ; finished with all of Swarm
+        ]
+
+
+
+          ; Set random motion for data outside search distance from centre
+          ;random-motion Aliens
+          ask Aliens [forward Motion    ]
+          sensor Aliens
+
+
+
+     ; Migrate the Swarm to the data
+     ; Use the control data as an attractor
+
+        set Control-data data with [state = 0 and dtype = 3 and symbol = false and topol = 0]
+        set Control-data Control-data with [Distancexyz-nowrap 0 0 0 < Dist2Centre]
+        let closest-incoming nobody
+
+          if (Control-data != nobody) [
+
+                     ask Control-data [
+           ; type " In the Control attractor field.. \n"
+            ;type " Control Data : " type [who] of Control-data type "\n"
+
+                        set active-data self
+                        set Norm array:from-list (list n1 n2 n3)
+                        set dist2closest 1000
+                        let movers Swarm with [distancexyz-nowrap [xcor] of active-data [ycor] of active-data [zcor] of active-data  <= Vision]
+
+                        set closest-incoming min-one-of movers [distancexyz-nowrap [xcor] of active-data [ycor] of active-data [zcor] of active-data ]
+                        ;  here only the movers (active-swarm) will move toward the local data
+
+                        if (movers != nobody and closest-incoming != nobody)  [
+                                                               set dist2closest distancexyz-nowrap [xcor] of closest-incoming [ycor] of closest-incoming [zcor] of closest-incoming
+
+                                                               if (dist2closest <= (Separation * 0.1))  [ separate closest-incoming active-data ]
+
+                                                               while [dist2closest > Separation / 10] [
+                                                                                    ; Bring the closest agents to the data only then the rest will follow as per the swarming parameters
+                                                                                    cohere closest-incoming active-data .5
+                                                                                    ; re-calculate the distance settings
+                                                                                    set dist2closest distancexyz-nowrap [xcor] of closest-incoming [ycor] of closest-incoming [zcor] of closest-incoming
+                                                                                   ]
+
+                                                               IDW-Geom-Estimate movers Control-data 3
+                                                               ]
+
+                                                ; (Disabled) Freeze the agent near the control data (Disabled with dist2closest <= -1)
+                  if (dist2closest <= -1)  [
+                              let NormIn array:from-list ( list [n1] of active-data [n1] of active-data [n1] of active-data  )
+                              flatten closest-incoming NormIn active-data
+                              ;IDW-Geom-Estimate closest-incoming Control-data 3
+                              IDW-Geom-Estimate movers Control-data 3
+                              ask closest-incoming [set state 0 set symbol false set size simsize * 1 ]
+
+                              ask one-of data with [(did = [did] of closest-incoming) and (shape = "hextop3d") ] [set state 0 set symbol true set size simsize set color cyan show-turtle]
+                              ask one-of data with [(did = [did] of closest-incoming) and (shape = "hextopsides3d") ] [ set state 0 set symbol true set size simsize set color cyan show-turtle]
+                              ask one-of data with [(did = [did] of closest-incoming) and (shape = "hexbase3d") ] [ set state 0 set symbol true set size simsize set color red show-turtle]
+                              ask one-of data with [(did = [did] of closest-incoming) and (shape = "hexbasesides3d") ] [ set state 0 set symbol true set size simsize set color red show-turtle]
+
+                                              ask active-data [set dist2closest 1000]
+                                              ask  data with [did = [did] of active-data] [set dist2closest 1000]
+
+                                              ]
+              ]
+
+           set closest-incoming nobody  ; reset
+          ]
+
+          set Control-data data with [state = 0 and dtype = 3 and symbol = false and topol = 0] ; Update Control-data agentset definition
+
+          set active-data nobody
+
+
+
+
+
+
+         ; Symbolization updates
+         ifelse (Symbolize = true)
+                                    [ask data with [symbol = true and state = 3] [set size simsize * .25 show-turtle]
+                                     ask data with [symbol = true and state = 0] [set size simsize * .5  show-turtle]
+                                     ask data with [symbol = false ] [set size simsize show-turtle]
+                                    ]
+                                    [ask data with [symbol = true and state = 3] [hide-turtle]
+                                     ask data with [symbol = true and state = 0] [hide-turtle]
+                                     ask data with [symbol = false and state = true] [set size simsize * .5 show-turtle]
+                                     ask data with [symbol = false and state = 0] [set size simsize show-turtle]
+                                    ]
+
+
+
+  ]  ; End of mode membrain
+
+
+
+ ; if (ticks = 2 and Export-Agents) [  let io "Agents_Sim_Test_01.vs" let op "C:/Data/Simulation/Test_Files/Folds/"
+ ;                                       type io type "\n"
+ ;                                       type op type "\n"
+ ;                                      write-data data with [symbol = false and dtype = 3]  io op]
+ ;
+
+
+  tick
+
+
+end ; End of simulation
+
+
+; Select an agentset from an existing agentset (friends-pool) within a specific proximal distance (dist-friends)
+; and/or angle of sighting (ViewAngle from user interface) to a single agent (host)
+; Reports the final friends-list without altering any geometric orientation
+; mode = 0  specified distance only
+; mode = 1  specified distance and angle of sighting
+; mode = 2  not yet specified
+; Gamma = smallest vector angle between normal of host agent and direction to one of the friend-pool agents
+; ViewAngle = angle specifed from user interface representing view angle from the down/up dip vector.
+to-report gathering [host friends-pool dist-friends type-mode]
+
+
+  let friends-list nobody
+  ; remove the host from the freinds-pool agent set
+  ask host [set friends-list other friends-pool ]
+
+
+
+       if (type-mode = 0)[
+                   ; make friends with only those in a specified distance
+
+                            set friends-list friends-list with [distancexyz-nowrap [xcor] of host [ycor] of host [zcor] of host <= dist-friends]
+
+
+  ]
+     if (type-mode = 1)[
+                   ; make friends with only those within a specified distance AND viewing angle
+                   let oh 0
+                   let op 0
+                   ask host [ set oh heading set op pitch ]
+                   set friends-list friends-list with [distancexyz-nowrap [xcor] of host [ycor] of host [zcor] of host <= dist-friends]
+                   set Norm array:from-list (list [n1] of host [n2] of host [n3] of host)
+                   ask friends-list [
+                                     ; keep original direction
+                                     let oheading heading
+                                     let opitch pitch
+                                     facexyz-nowrap self [xcor] of host [ycor] of host [zcor] of host
+                                     let V1F TrendPlunge2Vec heading pitch
+
+                                     ; reverse the direction to get the vector from source agent to neighbour
+                                     array:set V1F 0 array:item V1F 0 * -1
+                                     array:set V1F 1 array:item V1F 1 * -1
+                                     array:set V1F 2 array:item V1F 2 * -1
+
+
+
+           ; Calculate ϴ the minimal angle between the normal and the direction location of the neighbour
+           ; For identifying regions (selection for attraction only in this case)
+           let Gamma VectorAngle Norm V1F
+           ; Use user specified angle of +/- ViewAngle degrees to see friends from the host.
+           ; Included freinds are taged temporarily by setting state = -1
+
+           ; Case 1 View angle is 180 degrees, everything is tagged
+           if (ViewAngle = 180)    [  set state -1 ]
+           ; Case 2 View Angle is between 0 and 180
+           if (ViewAngle > 0 and ViewAngle < 180) [
+                         if (Gamma = 0) []
+                         if (Gamma < 90 and Gamma > 0)   [if ((90 - Gamma) <= (ViewAngle / 2)) [set state -1]]
+                         if (Gamma = 90) [set state -1]
+                         if (Gamma > 90 and Gamma <= 180) [if ((Gamma - 90) <= (ViewAngle / 2)) [set state -1]]
+                         ]
+           ; Case 3 View Angle is 0 degrees don't tag the agent
+           if (ViewAngle = 0) [ ]
+
+        ; Reset the heading and pitch after taging and set back to original before gathering
+        ;let V2F array:from-list (list [n1] of self [n2] of self [n3] of self)
+        ;let rv Vect2TrendPLunge V2F
+        ;set heading array:item rv 0
+        ;set pitch array:item rv 1
+        ; Note that direction of motion is not nesessarily the same as the normal or in the strike dip plane.
+        set heading oheading
+        set pitch opitch
+
+
+         ]
+
+         set friends-list friends-list with [state = -1]
+         ask friends-list [set state true ]
+
+
+     ]
+
+     if (type-mode = 2)[  ] ; no options for this mode
+
+
+if (count friends-list > 0) [
+    set closest-neighbour min-one-of friends-list [distancexyz-nowrap [xcor] of host [ycor] of host [zcor] of host  ]
+    ask closest-neighbour [ set D2Sim distancexyz-nowrap [xcor] of host [ycor] of host [zcor] of host set dist2closest D2Sim]
+    ask host [ set D2Sim distancexyz-nowrap [xcor] of closest-neighbour [ycor] of closest-neighbour [zcor] of closest-neighbour set dist2closest D2Sim]
+    ask friends-list [set D2Sim distancexyz-nowrap [xcor] of host [ycor] of host [zcor] of host]
+
+
+
+
+;  type "                                             Swarm Summary            \n\n\n"
+;
+;   type "               Host:  "  type [who] of host type " "  type [xcor] of host type " " type [ycor] of host type " " type [zcor] of host  type " \n"
+;   type "  Closest Neighbour:  "  type [who] of closest-neighbour type " "  type [xcor] of closest-neighbour type " " type [ycor] of closest-neighbour type " " type [zcor] of closest-neighbour  type " \n"
+;   type "       Friends-list: "  type [who] of friends-list type " \n "
+  ;type " Friends-list (x,y,z)" type [xcor] of friends-list type " \n "  type [ycor] of friends-list type " \n " type  [zcor] of friends-list type "\n\n"
+
+  ]
+
+
+
+
+  report friends-list
+
+
+end   ; End of gathering
+
+
+
+
+; Cell will select a number of nearest to centre agents
+; local-neighbourhood = input agentset
+; centre = single agent
+; cell-size = number of members in the cell
+to-report Cell [local-neighbourhood centre cell-size]
+;  type "  Centre      "  type [xcor] of centre type " " type [ycor] of centre type " " type [zcor] of centre  type " \n"
+;  type "  Neighbours  "  type [xcor] of local-neighbourhood type " \n "  type [ycor] of local-neighbourhood type " \n " type  [zcor] of local-neighbourhood type "\n\n"
+
+
+  let n-size count local-neighbourhood
+  let LNH nobody
+
+  ; calculate distance to controlling agent in centre of local swarm
+  ; D2Sim here means distance from neighbours to the centre agent not D2C which is centre of model (0,0,0)
+;  ask local-neighbourhood [set D2Sim distancexyz-nowrap [xcor] of centre [ycor] of centre [zcor] of centre ]
+ ; type "D2SIM of local-neighbourhood ..." type [who] of local-neighbourhood type " \n" type [D2Sim] of local-neighbourhood type "\n\n"
+  set LNH local-neighbourhood
+  ; Now convert elements of LNH to a list
+  let listneighbourhood [(list who did D2Sim )] of LNH
+
+
+
+         ; Sort the list of agents on Distance..
+         set listneighbourhood sort-on [D2Sim] LNH
+         if (length listneighbourhood >= cell-size  )
+                          [
+                      ; It may be necessary to convert and report an agent from an element of a list of agents using 'turtle-set'
+                      let mcn item 0 listneighbourhood
+                      ;set closest-neighbour turtle-set mcn
+                      set closest-neighbour mcn
+
+                      ask centre [set D2Sim [D2Sim] of closest-neighbour set dist2closest [D2Sim] of closest-neighbour]
+
+                     ; type "Me :" type [who] of centre type " " type  [did] of centre type " " type [D2Sim] of centre type "\n"
+                     ; type "Closest :" type [who] of closest-neighbour type " "  type [who] of closest-neighbour type " "  type [D2Sim] of closest-neighbour type "\n"
+                     ;     type listneighbourhood type "\n"
+
+                     ;    type "Sub-list: \n"
+                     ;    type sublist listneighbourhood 0 cell-size   type "\n"
+                      ;   type "This is now working !!!!  \n\n"
+
+
+            ; perform sub sampling from sorted list
+            let c1 cell-size
+            set listneighbourhood sublist listneighbourhood 0 c1
+            ; convert back to agent set
+            set LNH turtle-set listneighbourhood
+
+            ; filter for myself
+            set LNH LNH with [D2Sim > 0]
+                     ask centre [set neighbours LNH]
+        if (any? LNH) [
+                   ;   type "Final Friends-list: " type [who] of LNH type " " type [D2Sim] of LNH type "\n"
+                      let C matrix:from-row-list [(list who did D2Sim )] of LNH
+                   ;   type " \n The local and reduced matrix ...\n"
+                    ;   print matrix:pretty-print-text C
+                    ;   type "\n\n\n"
+                      ]
+      ]
+
+
+
+  report LNH
+
+end  ; end of Cell
+
+
+to-report link-up [linkset linkroot linknum]
+       let linklist nobody
+
+
+
+
+
+report linklist
+
+end
+
+
+
+; Create an active swarming agentset
+; Sticking on a best fit local plane through the swarm
+; Modified Sept 25, 2019 to accomodate IDW-SLERP of local data
+; Mode: 0 = symbolize on plane dips
+;       1 = do not update dips with regressed plane
+;
+
+to Swarming [Active-Swarm current-agent update-mode]
+
+ let BV array:from-list [0 0 0]
+ if (BC != nobody ) [ask BC [die]]
+
+   ask Swarm [set color orange]
+   ask Active-Swarm [set color red]
+   ask current-agent [set color green]
+
+
+
+
+
+          ; measure distance metrics
+          set BC barycentre Active-Swarm
+
+          ; find closest pairs
+          ; update dist2closest PROPERTY
+          ; update neighbours Property with just one [who] of the closest neighbour
+          ; make a list of neighbours in within a close distance (function of seperation distance * factor)
+
+          set closest-neighbour min-one-of Active-Swarm [distancexyz-nowrap [xcor] of current-agent [ycor] of current-agent [zcor] of current-agent ]
+          let farthest-neighbour max-one-of Active-Swarm [distancexyz-nowrap [xcor] of current-agent [ycor] of current-agent [zcor] of current-agent ]
+          set dist2closest distancexyz-nowrap [xcor] of closest-neighbour [ycor] of closest-neighbour [zcor] of closest-neighbour
+          set closest-sim Active-Swarm with [distancexyz-nowrap [xcor] of current-agent [ycor] of current-agent [zcor] of current-agent < ( Separation * 2 ) ]
+
+
+    ;type "Closest sims : " type count closest-sim type " total within seperation distance \n"
+
+
+
+    ; Rule 1 - seperate close agents by pushing them away from their nearest neighbour
+
+
+    ; Note: Empty agentsets are not equal to nobody. If you want to test for an empty agentset, use any?. You only get nobody back in situations
+    ;        where you were expecting a single agent, not a whole agentset.
+
+    if (dist2closest <= Separation and closest-neighbour != nobody)  [
+           separate current-agent closest-neighbour
+           ;if (any? closest-sim) [separate closest-sim current-agent ]
+
+           rogue
+           ]
+
+
+    ; Rule 2 - Agents at the edge of a cluster (farthest-neighbour) who are also far away from their nearest neighbour but in a different cluster must come closer to their nearest neighbour
+           ;attract farthest-neighbour BC
+
+
+    ; Rule 3 - Come close to my neighbours
+
+    if (dist2closest > Separation and closest-neighbour != nobody )     [
+
+
+           set Norm array:from-list ( list [n1] of current-agent [n2] of current-agent [n3] of current-agent )
+
+           cohere Active-Swarm current-agent 1
+
+
+
+
+
+
+ if (update-mode = 0) [
+
+                      IDW-Geom-Estimate Active-Swarm Control-data 3
+                      IDW-Geom-Estimate current-agent Control-data 3
+                      set Norm array:from-list ( list [n1] of current-agent [n2] of current-agent [n3] of current-agent )
+
+                      attract Active-Swarm current-agent
+
+                      update-dip closest-neighbour current-agent 0
+
+                      flatten closest-neighbour Norm current-agent
+
+                     ]
+
+
+  if (update-mode = 1) [
+         flatten Active-Swarm Norm current-agent
+         ; Bring the dip symbols with the leaders
+         Sensor self
+
+         ask other data with [did = [did] of self] [move-to self]
+         ;IDW-Geom-Estimate current-agent Active-Swarm 3
+                       ]
+
+
+ if (update-mode = 2) [
+         if (closest-neighbour != nobody)
+                                [
+                                set Norm array:from-list ( list [n1] of current-agent [n2] of current-agent [n3] of current-agent )
+                                flatten closest-neighbour Norm current-agent
+
+                                ;Sensor self
+
+                                ask other data with [did = [did] of myself] [move-to myself ]
+                                ; Bring the dip symbols with the leaders
+                                update-dip closest-neighbour Norm 1
+                                ;IDW-Geom-Estimate current-agent Active-Swarm 3
+                                ]
+                                ]
+           ; clean up Barycentre
+           ask BC[die]
+           ]
+
+   ; Bring the dip symbols with the leaders
+
+   Sensor self
+   ask other data with [did = [did] of myself] [move-to myself]
+
+
+
+end ; End of Swarming
+
+
+
+; Each agent particle is attracted to its closest neighbour or repulsed based on orientation and distance
+; Similar method Mean-norm but in reverse and with no barycentre needed.
+;
+
+; Atraction using gravitational force equation :
+              ; F = (G * m1 * m2) / d ^ 2
+              ; F is Force,  G is gravitational constant, directly influences the strength of the force
+              ; m1 mass of 1st object, m2 mass of second object, d is 3D distance between objects
+              ; ^2 is the exponent which could be modified toset Swarm-matesset Swarm-mates vary the distance effect.
+              ; Attraction - Repulsion  using inverse sine function:
+              ; y = sin^-1(1.27325 * ϴ - 1) * 0.63662
+              ;
+              ; produces a mapping of input values (ϴ) ranging from 0 to 90 degrees
+              ; to an output range from -1 to 1 with :
+              ; -1 = maximum repulsion
+              ;  0 = no repulsion of attraction
+              ;  1 = maximum attraction
+
+              ; F = (G * m1 * m2 / d ^2 ) * sin^-1 (1.27325 * ϴ - 1 ) * 0.63662
+
+
+; Attract an agentset (AP1) to a single agent (AP2)
+to attract [AP1 AP2]
+
+  let F 0          ; Final force based on direction and distance
+  let m1 10      ; let each mass be the same for now
+  let m2 10    ; could make different agents have a range of masses
+  let G Attractor      ; Normally G is very small 6.674×10−11 m3⋅kg−1⋅s−2 it is used here to amplify the attraction
+  let dist2 0       ; distance from AP2 to one of AP1
+  let ATheta 0     ; Vector angle between Normal of Active Swarm agent to neighbour direction
+  let trend 0
+  let plunge 0
+  let V1NN array:from-list [0 0 0]
+  let V2NN array:from-list [0 0 0]
+  let sepDir array:from-list [0 0]
+  set V2NN array:from-list (list [n1] of AP2 [n2] of AP2 [n3] of AP2 )
+  ask AP1 [
+
+
+   ; type "ask  0    " type heading type " " type pitch type " \n"
+   ; type "self 0    " type [heading] of self type " " type [pitch] of self type " \n"
+   ; type "myself 0  " type [heading] of myself type " " type [pitch] of myself type " \n\n"
+
+           facexyz-nowrap self [xcor] of AP2 [ycor] of AP2 [zcor] of AP2
+
+   ; type "ask  1    " type heading type " " type pitch type " \n"
+   ; type "self 1    " type [heading] of self type " " type [pitch] of self type " \n"
+   ; type "myself 1  " type [heading] of myself type " " type [pitch] of myself type " \n\n"
+
+
+
+           set trend heading
+           set plunge pitch
+
+           set V1NN TrendPlunge2Vec trend plunge
+           ; reverse the direction to get the vector from source agent to neighbour
+           ; needed to calculate the vector angleset active-agent self
+           array:set V1NN 0 array:item V1NN 0 * -1
+           array:set V1NN 1 array:item V1NN 1 * -1
+           array:set V1NN 2 array:item V1NN 2 * -1
+
+           set dist2 distancexyz-nowrap [xcor] of AP2 [ycor] of AP2 [zcor] of AP2
+
+           ; Calculate ϴ the minimal angle between the normal and the direction location of the neighbour
+           ; For identifying regions (attraction/repulsion)
+           set ATheta VectorAngle V2NN V1NN
+
+
+           ;  Gravitational term * Angular re-scaling term
+           ;set F  (G * m1 * m2 / dist2 ^ 2 ) * (sin ( (2 * ATheta)  - 90 ) * 2)
+          if (dist2 = 0 ) [set dist2 .0000001]  ; Avoid division by zero
+          ;set F  (G * m1 * m2 / dist2 ^ 2 ) * (sin ( (2 * ATheta)  - 90 ))
+          set F  (G * m1 * m2 / dist2 ^ 1.5 ) * (sin ( (2 * ATheta)  - 90 ))
+
+         ; type "Atrraction/repulsion factor :" type  (sin ( 2 * ATheta  - 90 ) ) type " Angle: " type ATheta type "\n"
+         ; type "Force: " type F type "\n"
+         ; type "Forward Units : "  type Motion * F type "\n\n"
+     ;Don't wory about checking for seperation the seperate command takes care of that later
+     ;ifelse (dist2 <= Separation) [Separate AP1 AP2 1 forward Motion] [forward Motion * F]
+           forward Motion * F
+           ; Bring the dip symbols with the leaders
+           Sensor self
+           ask other data with [did = [did] of self] [move-to self ]
+
+       ]
+
+end
+
+;similar to facexyz with the new feature of not facing wraped agent locations
+;faces the specified coordinates of the target agent WITHIN the world space
+;ONLY the heading and pitch of the local-agent is changed. All other properties are unchanged.
+to facexyz-nowrap [local-agent target-xcor target-ycor target-zcor]
+  let local-xcor [xcor] of local-agent
+  let local-ycor [ycor] of local-agent
+  let local-zcor [zcor] of local-agent
+  let dltx target-xcor - local-xcor
+  let dlty target-ycor - local-ycor
+  let dltz target-zcor - local-zcor
+  let lt-ray array:from-list (list dltx dlty dltz)
+
+  let new-facing Vect2TrendPlunge lt-ray
+  ask local-agent [set heading array:item new-facing 0 set pitch array:item new-facing 1 ]
+
+
+end ; End of facexyz-nowrap
+
+
+; Adjust the normals of particles to become homogonized with the group
+; worker is an individual agent, local-swarm is an agentset, core is usually the barycentre of the local swarm and needs to be
+; precalculated but could also be a specific agent that passes its location in the function. The core location is used to
+; weight the vector averaging based on distance.
+
+to-report bary-vector [worker local-swarm core]
+  let D2BC 0
+  let residual 1
+  let dnormal array:from-list [0 0 0]
+  ask worker [set dnormal array:from-list (list n1 n2 n3)]
+
+  let all-normals [(list n1 n2 n3)] of local-swarm
+
+  let Norm-Matrix matrix:from-row-list all-normals
+  ;print matrix:pretty-print-text Norm-Matrix
+  let Norm-dim matrix:dimensions Norm-Matrix
+  let num-norms item 0 Norm-dim
+
+
+  let AN1 matrix:get-column Norm-Matrix 0
+  let AN2 matrix:get-column Norm-Matrix 1
+  let AN3 matrix:get-column Norm-Matrix 2
+
+  let SAN1 Sum AN1
+  let SAN2 Sum AN2
+  let SAN3 Sum AN3
+
+  let MN1 SAN1 / num-norms
+  let MN2 SAN2 / num-norms
+  let MN3 SAN3 / num-norms
+
+  let mnorm array:from-list (list MN1 MN2 MN3)
+
+  ; Normalize the normal for unit length
+  let msize sqrt (MN1 ^ 2 + MN2 ^ 2 + MN3 ^ 2)
+  ifelse (msize != 0 )
+                [
+                  set MN1 MN1 / msize
+                  set MN2 MN2 / msize
+                  set MN3 MN3 / msize
+                ]
+                [
+                  set MN1 0
+                  set MN2 0
+                  set MN3 0
+                ]
+
+                 array:set mnorm 0 MN1
+                 array:set mnorm 1 MN2
+                 array:set mnorm 2 MN3
+
+
+  ; Rotate the worker towards the mean normal
+  ; Get the cross of my normal and teh mean swarm mates normal
+  ; to be used as a rotation axis
+  let DV cross dnormal mnorm
+  ; Get the vector angle
+  let DVAngle VectorAngle dnormal mnorm
+  ;calculate distance to bary centre
+
+        ; Scale D2BC so at residual t = 1 and at vision D2BC = 0
+        ; Based on linear interpolator C = (1-t)*A + t*B
+        ; D2BC = (1-t) * vision + t * residual
+        ; D2BC = v - t*v + t*r
+        ; D2BC - v = t*r - t*v
+        ; (D2BC - v) = t * (r - v)
+        ; t =  (D2BC - v) / (r - v)
+        ; Rot = t
+        ; Do a distance scaled rotation, if within the residual distance it will match ROT = 1 and vision distance is unchanged ROT = 0
+        ; Rotation weighted so dips blend into regional at vision distance and match exactly at residual distance
+
+
+
+
+  ask worker [set D2BC distancexyz-nowrap [xcor] of core [ycor] of core [zcor] of core]
+  let tcore ((D2BC - Dist2Centre) / (residual - Dist2Centre))
+  let FFRot (tcore * DVAngle)
+  ;Rotate the workers norm a percentage of the distance to the barry centre.
+  let worker_Orientation spin FFRot DV dnormal
+
+
+  ; COULD ALSO ASK THE SWARM-MATES TO ROTATE AT ONCE TO A FRACTION OF THE MEAN NORM
+  ask worker [
+
+  set dstrike array:item worker_Orientation 0
+  set ddip array:item worker_Orientation 1
+  set n1 array:item worker_Orientation 2
+  set n2 array:item worker_Orientation 3
+  set n3 array:item worker_Orientation 4
+  set doverturned array:item worker_Orientation 5
+  set qqw array:item worker_Orientation 6
+  set qqx array:item worker_Orientation 7
+  set qqy array:item worker_Orientation 8
+  set qqz array:item worker_Orientation 9
+  ]
+  ;print matrix:pretty-print-text Norm-Matrix
+  ;type "\n"
+  ; Update the parametrically rotated dips of the swarm
+  let sym other data with [did = [did] of worker ]
+        update-dip sym worker 0
+  report mnorm
+
+end
+
+
+; Note differences between Align and Cohere
+; Align will move the agent in a direction which is the average motion vector of the local swarm or flock
+; Whereas Cohere will move towards the local swarm barycentre, which can move it off-local plane used in flatten.
+; Cohere can also just be used to point to a local neighbour such as closest neighbour or cycle through a neighbour hood list.
+; cohere only points to the new target agent and does not update its orientation parameters.
+
+; Questions on final behavior or outcome:
+;        1. Is the outcome dependant on the order of local policy implementation?
+;        2. What is producing the spread in position distribution normal to the motion?
+;        3. How important is Cohere to move agents to a clustering state using barycentre calculations?
+;        4. Can we preferentially select neighbours with asymetric distances?
+
+; flatten
+; To preferentially flatten the swarm
+; by projecting the local swarm locations onto the regional dip plane
+; then adjusting the search-motion to be in that plane.
+; Does NOT adjust the dips to that plane
+; MySwarm = the selected Swarm Agentset
+; DNorm = the normal vector to the flattening plane
+; active-BC = the cartesian centre or point on the plane to project the Swarm motion onto
+to flatten [MySwarm DNorm active-BC]
+
+ ; Define the local plane
+
+ let mylocal_X 0
+ let mylocal_Y 0
+ let mylocal_Z 0
+
+ ask active-BC [set mylocal_X xcor set mylocal_Y ycor set mylocal_Z zcor]
+ ; Projecting a point onto a plane defined by a normal and a point on that plane
+ ; Here we assume that the local Barycentre is the point on the plane, but it could be any specified 3D point location.
+ ; Equation of a plane for a given Normal
+ ; N = (a,b,c)    The Normal to the plane
+ ; P  = (x,y,z)   The floating point off the plane
+ ; Po = d,e,f     The point on the plane
+ ; a*X + b*Y + c*Z = 0  Standard general equation of a plane
+ ; t  a parameter to define the magnitude of the vector or projection
+ ; (x + ta, y + tb, z + tc) is the projected point on the plane
+ ; using dot products ...
+ ; t = (ad - ax + be - by + cf - cz) / (a^2 + b^2 + c^2)
+let a array:item DNorm 0
+let b array:item DNorm 1
+let c array:item DNorm 2
+let P0x mylocal_X
+let P0y mylocal_Y
+let P0z mylocal_Z
+let tproj 0
+
+  ask MySwarm [
+
+  let px xcor
+  let py ycor
+  let pz zcor
+  let P2x 0
+  let p2y 0
+  let p2z 0
+  set tproj  ((a * P0x) - (a * px) + (b * P0y) - (b * py) + (c * P0z) - (c * pz)) / (a ^ 2 + b ^ 2 + c ^ 2)
+  set p2x px + (tproj * a)
+  set p2y py + (tproj * b)
+  set p2z pz + (tproj * c)
+  set xcor p2x
+  set ycor p2y
+  set zcor p2z
+
+   ; Now project the current direction onto this plane and re-direct
+
+   ; Projection of a vector onto a plane is simply a matter of subtracting the normal to plane componet from the original vector
+   ; The direction vector will be re-directed to be parallel to the plane
+   ; A = existing direction
+   ; N = Normal to the plane
+   ; B = new direction after projected to a plane
+   ; A simple projection of vector A onto B is as follows...but we don't need this here
+   ; B = A * cos (φ) where φ = angle between A and B to plane
+   ;
+   ; So a vector A onto a plane defined by its unit normal N to result in vector B which is on the plane:
+   ; B = A - ((A dot N) / (||N||^2)) * N      since size of N is unit 1...
+   ; B = A - (A.dot.N)N
+
+
+   ;let newDirection array:from-list [0 0 0]
+   ;let Current_Dir TrendPlunge2Vec heading pitch
+   ;let tdot dotp Current_Dir DNorm
+   ;array:set newDirection 0 array:item Current_Dir 0 - (tdot  * array:item DNorm 0)
+   ;array:set newDirection 1 array:item Current_Dir 1 - (tdot  * array:item DNorm 1)
+   ;array:set newDirection 2 array:item Current_Dir 2 - (tdot  * array:item DNorm 2)
+
+   ;let new Vect2TrendPLunge newDirection
+
+   ;set heading array:item new 0
+   ;set pitch array:item new 1
+
+
+  ; Bring the dip symbols with the leaders
+  Sensor self
+  ask other data with [did = [did] of self] [move-to self]
+
+  ; Update the dips with the control data
+  ; IDW-Geom-Estimate myself Control-data 3
+
+
+  ]
+
+
+end
+
+
+
+;Name: sensor
+;
+;
+;DESCRIPTION: Checks to see if agent is close to the world boundary
+;             Simulates an UNWRAPED world so calls on agents do not go beyond
+;             the model space.
+;
+;Date : Febuary 7, 2018     updated with quaternion rotation for real mirroring effect
+;       August 9, 2017
+;
+;
+;Author: Eric A. de Kemp
+;
+;RETURN VALUE: None
+;
+;PARAMETERS: Needs to be called from an ask agentset
+;
+;CALLED BY: Simulation
+;
+;CALLS: Mirror
+;
+;Notes:  Has to be fixed. Reversing the direction is not acting like a physical mirror reflection needs recalcualtion worked out
+;        Instead use a quaternion rotation whereby the a) normal to the wall surface is the rotation vector
+;        and b) the incoming vector is a function of athe single agent headding and pitch with c) 180 degrees as the rotation
+;        all paramitrs sent to the spin(a,b,c) function
+
+to Sensor [current-agentset]
+
+  ask current-agentset [
+
+
+  ; Use a ray trace method whereby the the position of the agent is tested to determine if it is outside the model space
+  ; When it is outside, back calculate the point of exit and mirror the trajectory to keep it moveing inside the model space.
+
+
+
+  ; Internal topology space test, test 6 conditions within 3 parallel walls, if one is true it must be outside.
+  ; Track which wall it goes through
+
+  ;Test if it is outside the model
+  if ( min-pxcor >= xcor or xcor >= max-pxcor or min-pycor >= ycor or ycor >= max-pycor or min-pzcor >= zcor or zcor >= max-pzcor )
+    [
+ ; Equations of planes for model
+
+  ; Point on the model edge
+  let PT0x 0
+  let PT0y 0
+  let PT0z 0
+
+  let A 0
+  let B 0
+  let C 0
+  let D  50
+  let NWall array:from-list [ 0 0 0 ]
+  let NWF array:from-list [ 0 0 0 ]
+  ; Six equations of the plane
+  ; x = -50
+  ; x = 50
+  ; y = 50
+  ; y = -50
+  ; z = 50
+  ; z = -50
+
+  ; Get current direction of myself
+  let R TrendPlunge2Vec heading pitch
+  ; Keep the original Ray
+  let R1 R
+ ; Current location = P0
+ let P1xcor xcor
+ let P1ycor ycor
+ let P1zcor zcor
+ let DistRay 0
+ let Dt 1000
+ ; Get normalized back vector
+
+ let Rx array:item R 0 * -1
+ let Ry array:item R 1 * -1
+ let Rz array:item R 2 * -1
+
+ let Mirror_Angle 180
+
+ ; P0 = P1 + t(R)
+ ; P0x = P1x + (t * Rx)
+ ; P0y = P1y + (t * Ry)
+ ; P0z = P1z + (t * Rz)
+ ; Ax + By + Cz + D = 0     (general 3D equation of a plane)
+ ; A,B,C = n1,n2,n3 of Normal to surface
+ ; D = pxcor-max = 50 (size of model space)
+ ; A(P1x + tRx) + B(P1y + tRy) + C(P1z + tRz) + D = 0
+ ; A*tRx + B*tRy + C*tRz = -(A*P1x + B*P1y + C*P1z + D)
+ ; t(A*Rx + B*Ry + C*Rz) =   -(A*P1x + B*P1y + C*P1z + D)
+ ; t =  -(A*P1x + B*P1y + C*P1z + D)  /   (A*Rx + B*Ry + C*Rz)
+
+ ; -100
+
+      let LM In-Space P1xcor P1ycor P1zcor Rx Ry Rz -1 0 0
+      set DistRay array:item LM 3
+                       ;Reset to the smallest projected distance to this model wall and set the normal to that wall
+                        if (DistRay <= Dt) [set Dt DistRay
+                                            set PT0x array:item LM 0
+                                            set PT0y array:item LM 1
+                                            set PT0z array:item LM 2
+                                            set NWF array:from-list (list array:item LM 4 array:item LM 5 array:item LM 6) ]
+
+   ; 100
+     set LM In-Space P1xcor P1ycor P1zcor Rx Ry Rz 1 0 0
+     set DistRay array:item LM 3
+                        ;Reset to the smallest projected distance to this model wall and set the normal to that wall
+                        if (DistRay <= Dt) [set Dt DistRay
+                                            set PT0x array:item LM 0
+                                            set PT0y array:item LM 1
+                                            set PT0z array:item LM 2
+                                            set NWF array:from-list (list array:item LM 4 array:item LM 5 array:item LM 6) ]
+
+
+      ; 0-10
+     set LM In-Space P1xcor P1ycor P1zcor Rx Ry Rz 0 -1 0
+     set DistRay array:item LM 3
+                        ;Reset to the smallest projected distance to this model wall and set the normal to that wall
+                        if (DistRay <= Dt) [set Dt DistRay
+                                            set PT0x array:item LM 0
+                                            set PT0y array:item LM 1
+                                            set PT0z array:item LM 2
+                                            set NWF array:from-list (list array:item LM 4 array:item LM 5 array:item LM 6) ]
+   ; 010
+     set LM In-Space P1xcor P1ycor P1zcor Rx Ry Rz 0 1 0
+     set DistRay array:item LM 3
+                       ;Reset to the smallest projected distance to this model wall and set the normal to that wall
+                        if (DistRay <= Dt) [set Dt DistRay
+                                            set PT0x array:item LM 0
+                                            set PT0y array:item LM 1
+                                            set PT0z array:item LM 2
+                                            set NWF array:from-list (list array:item LM 4 array:item LM 5 array:item LM 6) ]
+   ; 00-1
+    set LM In-Space P1xcor P1ycor P1zcor Rx Ry Rz 0 0 -1
+    set DistRay array:item LM 3
+                        ;Reset to the smallest projected distance to this model wall and set the normal to that wall
+                        if (DistRay <= Dt) [set Dt DistRay
+                                            set PT0x array:item LM 0
+                                            set PT0y array:item LM 1
+                                            set PT0z array:item LM 2
+                                            set NWF array:from-list (list array:item LM 4 array:item LM 5 array:item LM 6) ]
+   ; 001
+    set LM In-Space P1xcor P1ycor P1zcor Rx Ry Rz 0 0 1
+    set DistRay array:item LM 3
+                        ;Reset to the smallest projected distance to this model wall and set the normal to that wall
+                        if (DistRay <= Dt) [set Dt DistRay
+                                            set PT0x array:item LM 0
+                                            set PT0y array:item LM 1
+                                            set PT0z array:item LM 2
+                                            set NWF array:from-list (list array:item LM 4 array:item LM 5 array:item LM 6) ]
+
+
+
+      set xcor PT0x set ycor PT0y set zcor PT0z
+
+      Mirror Mirror_Angle NWF R1 Motion
+
+
+      ]
+    ; Bring the dip symbols with the leaders
+      ask other data with [did = [did] of myself] [move-to myself]
+    ]
+
+end  ; end of Sensor
+
+; Pick the wall to bounce and mirror
+; P1 = Out of model point
+; R  = Ray path from P1 back to the wall
+; A,B,C = Normal to wall
+
+to-report In-Space [P1x P1y P1z Rx Ry Rz A B C ]
+
+  ; D = Offset paramiter for model size
+  let D max-pxcor
+  let NW array:from-list [0 0 0 ]
+  let DistR 10000
+  let KM array:from-list [0 0 0 0 0 0 0]
+
+      let xyzt (A * Rx + B * Ry + C * Rz)
+      if (xyzt = 0) [set xyzt 0.000001] ; to avoid division by zero
+      let t  (-1 * (A * P1x + B * P1y + C * P1z + D))  /   xyzt
+      let P0x  P1x + (t * Rx)
+      let P0y  P1y + (t * Ry)
+      let P0z  P1z + (t * Rz)
+      ;test if in model space
+       if ( min-pxcor <= P0x and P0x <= max-pxcor and min-pycor <= P0y and P0y <= max-pycor and min-pzcor <= P0z and P0z  <= max-pzcor )
+                      [ set DistR sqrt ((P0x - P1x) ^ 2 + (P0y - P1y) ^ 2 + (P0z - P1z) ^ 2 )
+                        set NW array:from-list (list A B C )
+                        ]
+
+   array:set KM 0 P0x
+   array:set KM 1 P0y
+   array:set KM 2 P0z
+   array:set KM 3 DistR
+   array:set KM 4 array:item NW 0
+   array:set KM 5 array:item NW 1
+   array:set KM 6 array:item NW 2
+
+
+  ;send back final wall to mirror and distance paramiters
+  report KM
+end
+
+; Mirror the Path
+to Mirror [ MA WN PT leap]
+
+
+      let spinPath spin MA WN PT
+      let MPath array:from-list [0 0 0]
+      array:set MPath 0 array:item spinPath 2
+      array:set MPath 1 array:item spinPath 3
+      array:set MPath 2 array:item spinPath 4
+
+      array:set MPath 0 array:item MPath 0 * -1
+      array:set MPath 1 array:item MPath 1 * -1
+      array:set MPath 2 array:item MPath 2 * -1
+      let newPath Vect2TrendPlunge MPath
+
+
+      set heading array:item newPath 0
+      set pitch array:item newPath 1
+      forward leap
+
+
+end
+
+
+; Make an agent move in a random motion fashion with or without dip updates
+; particle = the input single agent
+
+to random-motion [particle]
+
+         ask particle [
+                 set active-agent particle
+
+          if (state = false and symbol = false) [
+                 let data-Dir TrendPlunge2Vec heading pitch
+                 let orig-strike heading
+                 let orig-pitch pitch
+                 let orig-dip roll
+                 let orig-over doverturned
+                 let pm 0
+                 ifelse (random -2 = -1) [set pm -1] [set pm 1]
+                 ; rotate with 0-10 degree random motion on dip and direction in 3D
+                 let rotation (random-float 10) * pm
+                 let rn1 n1 + random-float .01 * pm
+                 let rn2 n2 + random-float .01 * pm
+                 let rn3 n3 + random-float .01 * pm
+                 let rdd1 array:item data-Dir 0
+                 let rdd2 array:item data-Dir 1
+                 let rdd3 array:item data-Dir 2
+                 set rdd1 rdd1 + random-float .01 * pm
+                 set rdd2 rdd1 + random-float .01 * pm
+                 set rdd3 rdd1 + random-float .01 * pm
+                 set data-Dir array:from-list (list rdd1 rdd2  rdd3)
+                 let data-Norm array:from-list (list rn1 rn2  rn3)
+                 let data-Geom spin rotation data-Dir data-Norm
+                 set dstrike array:item data-Geom 0
+                 set ddip array:item data-Geom 1
+                 set n1 array:item data-Geom 2
+                 set n2 array:item data-Geom 3
+                 set n3 array:item data-Geom 4
+                 set doverturned array:item data-Geom 5
+                 set heading dstrike
+                 set roll ddip
+                 set pitch 0
+
+                 forward Motion
+
+      sensor self
+      ; Bring the dip symbols with the leaders
+      ask other data with [did = [did] of myself] [move-to self update-dip self active-agent 0]
+
+
+
+    ]; Bring the dip symbols with the leaders
+  Sensor self
+  ask other data with [did = [did] of self] [move-to self]
+
+  ]
+
+  Sensor particle
+end ; End of random-motion
+
+
+; Same as Average-heading but returns EV3 which can be considered as the regressed average norm
+; the previous code from Average-heading was combined with these 2 proceedures into one with a
+; switch for EV1,EV2,EV3 called E-mode
+; reports a direction vector
+to-report Mean-norm [Active-swarm E-mode]
+
+  ; get heading and pitch of each mate
+  let HPNlist [(list heading pitch)] of Active-swarm
+
+  let HPN matrix:from-row-list HPNlist
+
+  ; convert to direction vector
+  let HPDim matrix:dimensions HPN
+  let Fnum item 0 HPDim
+  let DirMates matrix:make-constant Fnum 3 0
+  let Dir array:from-list [0 0 0]
+  let k 0
+  while [k < Fnum ]
+        [
+        ;Specific conversion call here ...
+        set Dir TrendPlunge2Vec matrix:get HPN k 0 matrix:get HPN k 1
+        ; convert to a data matrix
+        matrix:set DirMates k 0 array:item Dir 0
+        matrix:set DirMates k 1 array:item Dir 1
+        matrix:set DirMates k 2 array:item Dir 2
+
+        set k k + 1
+        ]
+
+  ; convert to an orientation matrix
+  let OFMates OrientationMatrix DirMates
+
+
+  ; get the Eigen values and vectors
+ let EVMates EigenVector OFMates
+
+ let E1ls matrix:get-column EVMates 0
+ let E2ls matrix:get-column EVMates 1
+ let E3ls matrix:get-column EVMates 2
+
+ ; Isolate Eigen Vectos for all (FM) flock mates
+ let EV1FM array:from-list E1ls
+ let EV2FM array:from-list E2ls
+ let EV3FM array:from-list E3ls
+
+  if (E-mode) = 1 [report EV1FM]
+  if (E-mode) = 2 [report EV2FM]
+  if (E-mode) = 3 [report EV3FM]
+
+end
+
+
+
+;  steer towards average heading of neighbours
+;  align the normals to the 3rd Eigen vector
+;
+
+to align [mates my-current-agent]
+  ;turn-towards (average-heading mates 1)  ; Note: may not need to have the flock align with average motion vector
+
+
+  tilt-towards (average-heading mates 3) my-current-agent ; more important to have the normals converge locally with some flexibility to warp to the data vector field
+ ;turn-towards (convergent-heading mates)
+
+
+
+end
+
+
+; Notice this is not a reporter it just changes the direction of an agent
+to turn-towards [new-direction] ;; turn towards the new heading but never by more than "max-turn"
+
+  let max-turn 45  ; Can be made into a global or interface set variable later
+  let NewDir array:from-list [0 0 0]
+  let V2m new-direction
+  let V1m TrendPlunge2Vec heading pitch  ; Current direction
+  let Vaxis cross V1m V2m
+  ;let Vaxis EV2
+
+  let Theta VectorAngle V1m V2m ; separation angle between new direction of swarm mates and my current direction
+
+  if (abs Theta > max-turn and Theta != 0)  [ set Theta max-turn  * (abs Theta / Theta)]  ; keeps the polarity and limits to max-turn angle of arc
+
+
+                             let TOrientation spin Theta Vaxis V1m
+
+                             array:set NewDir 0 array:item TOrientation 2
+                             array:set NewDir 1 array:item TOrientation 3
+                             array:set NewDir 2 array:item TOrientation 4
+
+                             let newDirection Vect2TrendPlunge NewDir
+
+                             set heading array:item newDirection 0
+                             set pitch array:item newDirection 1
+
+
+
+
+end
+
+
+; Tilt the agentset towards the EV3 direction
+; EV3 should be direction of greatest variation in dip perpedicular to strike and down-dip vectors locally
+to tilt-towards [new-normal mca]
+  let current-symbology other data with [did = [did] of mca]
+  ;type " count symbol set: " type who type " " type count current-symbology type " \n"
+  let current-Norm array:from-list (list [n1] of mca [n2] of mca [n3] of mca)
+  let current-heading heading
+  let current-pitch pitch
+  ; find the rotation vector
+  let nncN cross  current-Norm new-normal
+  ;find the turning angle in degrees to rotate the old norm into the EV3 direction
+  let turn-angle VectorAngle current-Norm new-normal
+  ; find the new orientation parameters with spin
+  let EV3-Orientation spin turn-angle nncN current-Norm
+
+   ; set the new orientation parameters
+   set dstrike array:item EV3-Orientation 0
+   set ddip array:item EV3-Orientation 1
+   set n1 array:item EV3-Orientation 2
+   set n2 array:item EV3-Orientation 3
+   set n3 array:item EV3-Orientation 4
+   set doverturned array:item EV3-Orientation 5
+   set qqw  array:item EV3-Orientation 6
+   set qqx  array:item EV3-Orientation 7
+   set qqy  array:item EV3-Orientation 8
+   set qqz  array:item EV3-Orientation 9
+
+   ; update heading, roll and pitch
+   set heading dstrike
+   set roll ddip
+   set pitch 0
+
+  ; update the symbolization
+  let ttactive-agent self
+  update-dip current-symbology ttactive-agent 0
+
+  ;reset the Swarm leader to its original motion direction vector
+  ;ask mca [set heading current-heading set pitch current-pitch]
+
+
+end   ; End of tilt-toward procedure
+
+
+
+to-report average-heading [mates EV-mode]  ;; Find average of headings of flockmates.
+
+
+  ; get heading and pitch of each mate
+  let HPNlist [(list heading pitch)] of mates
+
+  let HPN matrix:from-row-list HPNlist
+
+  ; convert to direction vector
+  let HPDim matrix:dimensions HPN
+  let Fnum item 0 HPDim
+  let DirMates matrix:make-constant Fnum 3 0
+  let Dir array:from-list [0 0 0]
+  let k 0
+  while [k < Fnum ]
+        [
+        ;Specific conversion call here ...
+        set Dir TrendPlunge2Vec matrix:get HPN k 0 matrix:get HPN k 1
+        ; convert to a data matrix
+        matrix:set DirMates k 0 array:item Dir 0
+        matrix:set DirMates k 1 array:item Dir 1
+        matrix:set DirMates k 2 array:item Dir 2
+
+        set k k + 1
+        ]
+
+  ; convert to an orientation matrix
+  let OFMates OrientationMatrix DirMates
+
+  ; get the Eigen values and vectors
+ let EVMates EigenVector OFMates
+
+ let E1ls matrix:get-column EVMates 0
+ let E2ls matrix:get-column EVMates 1
+ let E3ls matrix:get-column EVMates 2
+
+ ; Isolate Eigen Vectos for all (FM) flock mates
+ let EV1FM array:from-list E1ls
+ let EV2FM array:from-list E2ls
+ let EV3FM array:from-list E3ls
+
+
+  if (EV-mode = 1) [report EV1FM]
+  if (EV-mode = 2) [report EV2FM]
+  if (EV-mode = 3) [report EV3FM]
+
+end
+
+
+
+to-report convergent-heading [mates]
+
+  let C barycentre mates
+  ask C [hide-turtle]
+  let dddx [xcor] of C - xcor
+  let dddy [ycor] of C - ycor
+  let dddz [zcor] of C - zcor
+
+  let VC array:from-list (list dddx dddy dddz)
+  ask C [die]
+  report VC
+
+end
+
+
+; steer towards a position mLBC, usually the specified barycentre or closest neighbour
+; Could be adapted for local Bonding .....
+; strength = interger factor to enhnace the cohesion. Used to balance data versus swarm attraction
+to cohere [this-swarm mLBC strength]
+
+ let heart mLBC
+ let countme 0
+
+  if (this-swarm != nobody) [ ask this-swarm [ set countme countme + 1 ]]
+
+ if (this-swarm != nobody) [ask this-swarm [
+
+
+       let V2Heart array:from-list [0 0 0]
+
+       if ( heart != nobody )
+                     [
+                     ; Get current direction of myself
+                     let V1me TrendPlunge2Vec heading pitch
+
+                     let dddx [xcor] of heart - xcor
+                     let dddy [ycor] of heart - ycor
+                     let dddz [zcor] of heart - zcor
+
+                     ; Normalize
+                     let sHeart sqrt (dddx ^ 2 + dddy ^ 2 + dddz ^ 2 )
+                     if (sHeart <= 0 ) [set sHeart .000001]  ; Avoids division by zero
+                     array:set V2Heart 0 dddx / sHeart
+                     array:set V2Heart 1 dddy / sHeart
+                     array:set V2Heart 2 dddz / sHeart
+
+                     ;ask heart [die]
+                     ; This direction is now pointing to the new Barycentre which could be off plane
+
+                     turn-towards V2Heart
+                     forward Motion * strength
+                     ; Bring the dip symbols with the leaders
+
+                     Sensor self
+                     ask other data with [did = [did] of self] [move-to self]
+
+
+                     ; Note that heading and direction are decouped from orientation at this stage
+                     ; determine the Eigen vectors of the Swarm
+                     ;set Norm average-heading myswarm 3
+
+
+                     if (countme = 1) [ set Norm array:from-list (list n1 n2 n3)]
+                     if (countme > 1) [ set Norm Mean-norm this-swarm 3]
+
+                     ]
+  ]
+  ]
+end
+
+
+
+; Avoid crowding neigbours
+; Make each pair turn the first one opposite from the other and move away in the plane of the local trajectory
+; Note in separation Sep-mode = 0 we do not constrain the turning angle to max angle. We just take the oposite trajectory of the nearest neighbour
+; This is 180 degrees and acts as a Separation criteria.
+; A1 is an agentset, A2 is a single agent
+; for back propagation to simply reverse the motion direction when in the seperation distance
+; for defining the near on-pane direction cross to the mean normal of a local-swarm and the 2 agents linkage.
+; Seperate needs to preserve the dip orientation while moving the agent off of a collapsing swarm and witin a local plane
+; This will keep the continuity inact.
+
+to separate [A1 A2 ]
+let trend 0
+let plunge 0
+  let A2-Norm array:from-list ( list [n1] of A2 [n2] of A2 [n3] of A2 )
+  let V1NN array:from-list [0 0 0]
+  let V2NN array:from-list [0 0 0]
+  let sepDir array:from-list [0 0]
+
+  ask A1 [
+          facexyz-nowrap self [xcor] of A2 [ycor] of A2 [zcor] of A2
+          set trend heading
+          set plunge pitch
+          set V1NN TrendPlunge2Vec trend plunge
+          array:set V1NN 0 array:item V1NN 0 * -1
+          array:set V1NN 1 array:item V1NN 1 * -1
+          array:set V1NN 2 array:item V1NN 2 * -1
+          ; Project V1NN onto the A1Norm plane to get the appropriet on plane sepration direction vector
+          set V1NN proj A2-Norm V1NN
+
+          set sepDir Vect2TrendPlunge V1NN
+          set heading array:item sepDir 0
+          set pitch array:item sepDir 1
+          forward Motion
+          ; Reset to original orientation
+          ;set heading trend
+         ; set pitch plunge
+       ]
+
+
+
+
+Sensor A1
+
+end
+
+;Checks for rogue behavior such as when agents colapse and can't see outside their flock
+to rogue
+
+  let countclosest count Swarm-mates with [( dist2closest <= Separation / 2) ]
+  if (countclosest > 0) [
+    let rogueset Swarm-mates with [ ( dist2closest <= ( Separation / 2 ))]
+    ask rogueset [let num2 countclosest]
+    ; ask rogueset [set label num2 ]
+    if (countclosest > 1) [ set color red set size 2 set shape "circle" show-turtle  ]
+    let backheading 0
+    let backpitch 0
+    let backdir array:from-list [0 0]
+    let tosc array:from-list [0 0 0]
+    let sc barycentre rogueset
+
+    ask rogueset [facexyz [xcor] of sc [ycor] of sc [zcor] of sc
+                  set tosc TrendPlunge2Vec heading pitch
+                  array:set tosc 0 array:item tosc 0 * -1
+                  array:set tosc 1 array:item tosc 1 * -1
+                  array:set tosc 2 array:item tosc 2 * -1
+                  set backdir Vect2TrendPlunge tosc
+                  set heading array:item backdir 0
+                  set pitch array:item backdir 1
+
+
+                ]
+    ;forward separation * direction
+    if (sc != nobody) [ ask sc [die] ]
+  ]
+end
+
+
+; Calculates the barycentre of an agentset
+; Modified for data agents
+to-report barycentre [group]
+
+  let ns count group
+  ifelse (ns > 0) [
+                  let Coordlist [(list xcor ycor zcor)] of group
+                  ;print Coordlist type "\n"
+                  let Coords matrix:from-row-list Coordlist
+                  ;print matrix:pretty-print-text Coords
+                  ;type "\n"
+
+                  let bcID 0
+                  let xlist matrix:get-column Coords 0
+                  let ylist matrix:get-column Coords 1
+                  let zlist matrix:get-column Coords 2
+
+                  let sumx sum  xlist
+                  let sumy sum  ylist
+                  let sumz sum  zlist
+                  let mx  (sumx / ns)
+                  let my  (sumy / ns)
+                  let mz  (sumz / ns)
+                 ; print matrix:pretty-print-text Coords type "\n"
+                  hatch-data 1 [set did who set bcID who set dtype 0 setxyz mx my mz set color white set size 2 ]
+                  let bary_centre one-of data with [did = bcID and dtype = 0  ]
+                  ; reports a single agent
+                   report bary_centre
+
+                  ]
+
+                 [ report nobody]
+
+end
+
+
+; EigenVector calculates the 3 Principal direction vectors from an
+; input Agentset of planar observations with 3 properties for N1 N2 N3 normal to bedding
+; returns the matrix array with Col 0 = E1, Col 1 = E2 , Col 2 = E3
+to-report EigenVector [StrucMatrix]
+    let EV matrix:eigenvectors StrucMatrix
+    report EV
+
+end
+
+; Loads a N x 3  Data Matrix of orientation vectors
+; Returns the orientation matrix used for Eigen Analysis
+to-report OrientationMatrix [DataMatrix]
+
+; Set up the orientation matrix OMX
+
+let ODim matrix:dimensions DataMatrix
+let dN item 0 ODim
+let OMX matrix:from-column-list [[0 0 0][0 0 0][0 0 0]]
+
+let SXX 0
+let SYY 0
+let SZZ 0
+let SXY 0
+let SXZ 0
+let SYZ 0
+let i 0
+
+; Should be a simpler way ?
+while [i < dN] [set SXX SXX + (( matrix:get DataMatrix i 0 ) ^ 2) set i i + 1]
+set i 0
+while [i < dN] [set SYY SYY + (( matrix:get DataMatrix i 1 ) ^ 2) set i i + 1]
+set i 0
+while [i < dN] [set SZZ SZZ + (( matrix:get DataMatrix i 2 ) ^ 2) set i i + 1]
+set i 0
+while [i < dN] [set SXY SXY + (( matrix:get DataMatrix i 0 ) * ( matrix:get DataMatrix i 1 )) set i i + 1]
+set i 0
+while [i < dN] [set SXZ SXZ + (( matrix:get DataMatrix i 0 ) * ( matrix:get DataMatrix i 2 )) set i i + 1]
+set i 0
+while [i < dN] [set SYZ SYZ + (( matrix:get DataMatrix i 1 ) * ( matrix:get DataMatrix i 2 )) set i i + 1]
+set i 0
+
+
+ matrix:set OMX 0 0 SXX
+ matrix:set OMX 1 0 SXY
+ matrix:set OMX 2 0 SXZ
+ matrix:set OMX 0 1 SXY
+ matrix:set OMX 1 1 SYY
+ matrix:set OMX 2 1 SYZ
+ matrix:set OMX 0 2 SXZ
+ matrix:set OMX 1 2 SYZ
+ matrix:set OMX 2 2 SZZ
+
+
+; Woodcock (1977) suggests normalizing the orientation matrix before Eigen Analysis with the number of observations:
+; Not required
+;set OM matrix:times-scalar OM ( 1 / dN )
+;print "\n              The NORMALIZED Orientation Matrix  ...\n"
+;print matrix:pretty-print-text OM
+
+; Note Eigen vectors derived from the orientation matrix come out pre-sorted
+; such that Eigen Values E1 < E2 < E3 lowest values (E1 ...least variance down plunge
+; See Hillier et al. 2013).
+
+    ;print matrix:pretty-print-text OMX type "\n"
+
+    report OMX
+
+end
+
+
+; Convert a Trend and Plunge to a normalized unit Vector
+; Used to get a vector from an agent heading and pitch state
+to-report TrendPlunge2Vec [aTrend aPlunge]
+let Vector array:from-list [0 0 0]
+  let tdx sin ( aTrend ) *  cos ( aplunge )
+  let tdy cos ( aTrend ) * cos ( aplunge )
+  let tdz sin ( aPlunge )
+
+  array:set Vector 0 tdx
+  array:set Vector 1 tdy
+  array:set Vector 2 tdz
+
+  ; Normalize
+  let vsize sqrt ( array:item Vector 0 ^ 2 + array:item Vector 1 ^ 2 + array:item Vector 2 ^ 2 )
+  if (vsize = 0) [set vsize 0.0000001]  ; Avoid division by zero
+  array:set Vector 0 array:item Vector 0 / vsize
+  array:set Vector 1 array:item Vector 1 / vsize
+  array:set Vector 2 array:item Vector 2 / vsize
+
+
+
+
+report Vector
+
+end
+
+; Convert a 3 element vector to trend and plunge
+; directly useable for seting agent heading and pitch
+to-report Vect2TrendPlunge [V3]
+
+  ; Normalize to be safe
+  let vptsize sqrt ( array:item V3 0 ^ 2 + array:item V3 1 ^ 2 + array:item V3 2 ^ 2 )
+  if (vptsize <= 0) [set vptsize 0.0000001]
+  array:set V3 0 array:item V3 0 / vptsize
+  array:set V3 1 array:item V3 1 / vptsize
+  array:set V3 2 array:item V3 2 / vptsize
+
+
+  let trendandplunge array:from-list [0 0]
+  let header safe-atan array:item V3 0 array:item V3 1
+  let diver asin array:item V3 2
+
+  array:set trendandplunge 0 header
+  array:set trendandplunge 1 diver
+
+  report trendandplunge
+
+end
+
+;; Avoid atan 0 0 problem. Essential for Behavior Space
+to-report safe-atan [Xx Yy] report ifelse-value (Xx = 0 and Yy = 0) [0][atan Xx Yy] end
+
+
+; Make me yellow
+to-report MyFunction [ me ]
+     set color yellow
+     let My-agent data with [color = yellow]
+     report My-agent
+end
+
+
+; Calculate the linear parametric value between 2 extremes
+to-report linear [t minimum maximum]
+  let PP 0
+
+
+
+
+          let AA minimum
+          let BB maximum
+          set PP ((( 1 - t ) * AA) + (t * BB))
+  report PP
+end
+
+; rescales an array of values to a desired output range
+;In-Values = A single array of numeric values
+;Low-Range = minimal output value requested i.e. -50.00000
+;High-Range = maximal output value requested i.e. 50.00000
+;Buffer = percentage padding beyond the input data values
+;         (.25 for 25%, 0 for no padding which would use the exact input Max and Min.)
+;SFact = Scaling Factor from user interface (.1 to 10) for all dimensions)
+;Used for scaling high spatial coordinate values, typical from GIS such as are used in UTM grids.
+; Returns a value in the specified range as a numeric array with same indexing as the input array.
+
+to-report scale [In-Values Low-Range High-Range Padding SFact]
+  let A max In-Values
+  let B min In-Values
+  let AA High-Range
+  let BB Low-Range
+  let t 0.00000
+  ;type "A and B input max min: " type A type "   " type B type "    \n"
+
+
+
+  let dAB A - B
+  ; For up or down scaling
+  set dAB dAB * SFact
+  set A A + (dAB * Padding / 2)
+  set B B - (dAB * Padding / 2)
+  let C array:from-list In-Values
+
+  let Inl array:length C
+
+   type "A and B input max min: " type A type "   " type B type "    \n"
+  type "Output model max min: " type AA type "   " type BB type "    \n"
+
+  let i 0
+  while [i < Inl ]
+
+       [
+
+    ifelse (B - A) = 0 [array:set C i A / 10]
+          [ set t (((array:item C i) - A) / (B - A))
+            array:set C i ((1 - t) * AA + (t * BB))]
+         set t 0.00000
+         set i i + 1
+        ]
+
+    let Rescaled-data array:to-list C
+
+    report Rescaled-data
+
+end
+
+
+
+; Update dip of local sim agent(s) with any other single sim regional agent dip (update-mode = 0)
+; OR a Normal (3 element vector array [-1 to +1, -1 to +1, -1 to +1] (update-mode = 1)
+; Modified from previous update-dip proceedure to work on 'data' not 'sims' since data has
+; different property names. For example data has a ddip property for dip and sims have sdip.
+; Also updated to include quaternion properties.
+to update-dip [ local-agentset regional-agent-Norm update-mode ]
+
+  if (update-mode = 0) [ set Norm strdip2norm [dstrike] of regional-agent-Norm [ddip] of regional-agent-Norm [doverturned] of regional-agent-Norm]
+  if (update-mode = 1) [ set Norm regional-agent-Norm] ; for direct input of a normal vector
+
+
+   let DDvec Norm2DD Norm
+   let new_Orientation spin 0 DDvec Norm
+   let nStrike array:item new_Orientation 0
+   let nDip array:item new_Orientation 1
+   set Nx array:item new_Orientation 2
+   set Ny array:item new_Orientation 3
+   set Nz array:item new_Orientation 4
+   let nOverturned array:item new_Orientation 5
+   let nqw array:item new_Orientation 6
+   let nqx array:item new_Orientation 7
+   let nqy array:item new_Orientation 8
+   let nqz array:item new_Orientation 9
+
+
+
+
+   ask local-agentset [set dstrike nStrike set ddip nDip set doverturned nOverturned ]
+   ask local-agentset [set qqw nqw  set qqx nqx set qqy nqy set qqz nqz ]
+   ask local-agentset [set heading dstrike set roll ddip set n1 Nx set n2 Ny set n3 Nz]
+   ask local-agentset [set pitch 0]
+
+  ; update the symbology for the search agent sim
+   ask other data with [did = [did] of local-agentset]
+                       [
+                         set dstrike [dstrike] of local-agentset
+                         set ddip [ddip] of local-agentset
+                         set n1 [n1] of local-agentset
+                         set n2 [n2] of local-agentset
+                         set n3 [n3] of local-agentset
+                         set doverturned [doverturned] of local-agentset
+                         set qqw [qqw] of local-agentset
+                         set qqx [qqx] of local-agentset
+                         set qqy [qqy] of local-agentset
+                         set qqz [qqz] of local-agentset
+                         set heading [dstrike] of local-agentset
+                         set roll  [ddip] of local-agentset
+                         set pitch  0
+                       ]
+
+end
+
+
+
+; Convert strike and dip (RHR) to a Unit Normal vector. Input is in degrees. Normal is perpendicular to plane
+to-report strdip2norm [ fstrike fdip foturn ]
+
+let polarity 0
+let ddx 0
+let ddy 0
+let ddz 0
+let sx 0
+let sy 0
+let sz 0
+
+; bug fix to handle non-logical input for overtuned values
+if (foturn = 1) [set foturn true]
+if (foturn = 0) [set foturn false]
+if (foturn = -1) [set foturn false]
+if (foturn = -99999) [set foturn false]
+
+let fNorm array:from-list [0 0 0] ; Local function Normal array
+
+    if (foturn) [set fstrike fstrike set fdip fdip + 180]
+    ifelse (foturn) [set polarity -1] [set polarity 1]
+    ;if (polarity = -1 and fdip = 90) [set polarity 1] ; Don't force the polarity  for vertical beds to be to one side
+
+    ; down dip vector
+    set ddx cos (-1 * fstrike ) * cos (-1 * fdip )
+    set ddy sin (-1 * fstrike ) * cos (-1 * fdip )
+    set ddz sin (-1 * fdip )
+
+    ; strike vector
+    set sx -1 * ddy
+    set sy ddx
+    set sz 0
+
+    ; v Cross vp to get the normal or pole to bedding p. 143 Algebra & Geometry, Stewart et al. 1989
+    let NNx (ddy * sz) - (ddz * sy)
+    let NNy (ddz * sx) - (ddx * sz)
+    let NNz (ddx * sy) - (ddy * sx)
+
+  ; Normalize the normal for unit length
+  let Lsize sqrt(NNx ^ 2 + NNy ^ 2 + NNz ^ 2)
+
+
+
+
+  set NNx (polarity * NNx) / Lsize
+  set NNy (polarity * NNy) / Lsize
+  set NNz (polarity * NNz) / Lsize
+
+
+       array:set fNorm 0 NNx
+       array:set fNorm 1 NNy
+       array:set fNorm 2 NNz
+
+report fNorm
+
+end
+
+
+; Calculates the smallest angle between 2 3D vectors
+to-report VectorAngle [C1 C2]
+
+
+
+  let V 360
+
+ ; |C1|*|C2|cos φ = C1 dot C2
+ ; cos φ = ( C1 dot C2 ) / |C1|*|C2|
+ ; |C1| = sqrt(NNx ^ 2 + NNy ^ 2 + NNz ^ 2)
+ ; φ = acos (( C1 dot C2 ) / |C1|*|C2|)
+ ; if C1=C2 dot product of same vector is 1 (for normalized unit vectors)
+ ; Then acos(1) = 0 degrees
+ ; if C1 = -C2 (reverse vectors) then vector angle is 180 degrees
+ ; so acos(?) = 180 degrees
+
+  let C1x array:item C1 0
+  let C1y array:item C1 1
+  let C1z array:item C1 2
+  let C2x array:item C2 0
+  let C2y array:item C2 1
+  let C2z array:item C2 2
+
+  let SC1 sqrt(C1x ^ 2 + C1y ^ 2 + C1z ^ 2)
+  let SC2 sqrt(C2x ^ 2 + C2y ^ 2 + C2z ^ 2)
+
+
+
+  ; Prevent a division by zero
+  ifelse (SC1 = 0 or SC2 = 0) [
+  set C1x precision C1x 5
+  set C1y precision C1y 5
+  set C1z precision C1z 5
+  set C2x precision C2x 5
+  set C2y precision C2y 5
+  set C2z precision C2z 5
+  ]
+  [
+   set C1x precision (C1x / SC1) 5
+  set C1y precision (C1y / SC1) 5
+  set C1z precision (C1z / SC1) 5
+  set C2x precision (C2x / SC2) 5
+  set C2y precision (C2y / SC2) 5
+  set C2z precision (C2z / SC2) 5
+  ]
+
+  ; Normalized and not too precise to make condition of vector equality fail
+  array:set C1 0 C1x
+  array:set C1 1 C1y
+  array:set C1 2 C1z
+  array:set C2 0 C2x
+  array:set C2 1 C2y
+  array:set C2 2 C2z
+
+
+
+  let C1dotC2 dotp C1 C2
+
+ ; type "C1 & C2 : " type C1 type "   " type C2 type "C1dotC2 " type C1dotC2 type "SC1 " type SC1 type "SC2 " type SC2 type"\n"
+ ; type " acos is Trying to solve : "  type ( C1dotC2 / ( SC1 * SC2 ))
+
+  ; acos function gives an error with < -1 or > 1 for example -1.0000045 which is attemping to make an angle > 180
+  ; the smallest angle between 2 vectors in 3D space is ALWAYS <= 180
+
+
+  ifelse (SC1 = 0 or SC2 = 0) [set V 0] [
+  ifelse ((C1x = C2x and C1y = C2y and C1z = C2z) or (C1dotC2 / (SC1 * SC2)) > 1 )
+  [set V  0]
+  [ifelse (C1dotC2 / (SC1 * SC2) < -1.00000 ) [set V 180 ]
+                                               [set V acos ( C1dotC2 / (SC1 * SC2) ) ]
+  ]]
+  ;type " Vector Angle " type V type " \n"
+report V
+
+end
+
+; Dot product  - defined as the LENGTH of the projection of a vector onto another vector through an angle also = |A||B| Cos(φ)
+; acute angle dot is > 0
+; obtuse angle dot is < 0
+; right angle dot = 0
+; if C1=C2 dot product of same vector is 1 (for normalized unit vectors)
+to-report dotp [B1 B2]
+  let dot -99999
+
+  let B1x array:item B1 0
+  let B1y array:item B1 1
+  let B1z array:item B1 2
+  let B2x array:item B2 0
+  let B2y array:item B2 1
+  let B2z array:item B2 2
+
+   set dot ((B1x * B2x) + (B1y * B2y) + (B1z * B2z))
+
+  report dot
+
+end
+
+;Project a normalized unit vector A, orthogonally to a plane defined by its Normal NP
+; Report the new on-plane vector
+to-report proj [NP Avec]
+
+let Bvec array:from-list [0 0 0]
+
+ array:set Bvec 0 array:item Avec 0 - ((dotp Avec NP) * array:item NP 0)
+ array:set Bvec 1 array:item Avec 1 - ((dotp Avec NP) * array:item NP 1)
+ array:set Bvec 2 array:item Avec 2 - ((dotp Avec NP) * array:item NP 2)
+
+report Bvec
+
+end
+
+
+
+; reports the normal to V1 X V2
+; p. 143 Algebra & Geometry, Stewart et al. 1989
+; V1 and V2 are 3 element vector arrays
+; cnorm is a returned normalized vector array
+to-report cross [V1 V2]
+    ;type "Cross V1 & V2 " type V1 type "  " type V2 type " \n"
+
+    let cnorm array:from-list [0 0 0]
+    let Lsize 0
+
+    let V1x precision ( array:item V1 0 ) 5
+    let V1y precision ( array:item V1 1 ) 5
+    let V1z precision ( array:item V1 2 ) 5
+
+    let V2x precision ( array:item V2 0 ) 5
+    let V2y precision ( array:item V2 1 ) 5
+    let V2z precision ( array:item V2 2 ) 5
+     ; Check if V1 & V2 are the same to avoid div by zero
+     ifelse (V1x = V2x and V1y = V2y and V1z = V2z)
+            [
+            array:set cnorm 0 0
+            array:set cnorm 1 0
+            array:set cnorm 2 0
+            ]
+            [
+               let NNx (V1y * V2z) - (V1z * V2y)
+               let NNy (V1z * V2x) - (V1x * V2z)
+               let NNz (V1x * V2y) - (V1y * V2x)
+
+            ; Normalize the normal for unit length
+            set Lsize sqrt(NNx ^ 2 + NNy ^ 2 + NNz ^ 2)
+            ifelse (Lsize != 0 ) [
+
+                 set NNx NNx / Lsize
+                 set NNy NNy / Lsize
+                 set NNz NNz / Lsize
+ ; Normalize the normal for unit length
+            set Lsize sqrt(NNx ^ 2 + NNy ^ 2 + NNz ^ 2)
+            ifelse (Lsize != 0 ) [
+
+                 set NNx NNx / Lsize
+                 set NNy NNy / Lsize
+                 set NNz NNz / Lsize
+
+                 array:set cnorm 0 NNx
+                 array:set cnorm 1 NNy
+                 array:set cnorm 2 NNz
+                ]
+                [
+                array:set cnorm 0 0
+                array:set cnorm 1 0
+                array:set cnorm 2 0
+               ]
+                 array:set cnorm 0 NNx
+                 array:set cnorm 1 NNy
+                 array:set cnorm 2 NNz
+                ]
+                [
+                array:set cnorm 0 0
+                array:set cnorm 1 0
+                array:set cnorm 2 0
+               ]
+
+            ]
+report cnorm
+
+end
+
+; Derive down dip vector from normal
+to-report Norm2DD [ Normal ]
+
+ ; Set the rotation angle in degrees about the Normal
+ let Rn -90 ; changed from 90 June 29, 2018
+ let Qn Normal
+ let nn1 array:item Normal 0
+ let nn2 array:item Normal 1
+ let nn3 array:item Normal 2
+ let DD array:from-list [0 0 0]
+
+ ; The old way ....
+ ; Cross the normal and strike vectors  p. 143 Algebra & Geometry, Stewart et al. 1989
+ ;
+ ; A X B -> A = [a,b,c] B = [d,e,f]
+ ;
+ ;         X  Y  Z  X  Y
+ ;         a  b  c  a  b
+ ;         d  e  f  d  e
+ ;
+ ; A X B = [X,Y,Z] = [(bf-ce),(cd-af),(ae-bd)]
+ ;
+
+ ; The new way using quaternions... just rotate directly a normal component 90 degrees
+ ; Dip direction vector (horizontal by definition) not the strike vector
+ let DipDir array:from-list [0 0 0]
+
+ ; Avoid division by zero error for dip = 0 which results from a zero normal
+ ; standardize on making strike 0 pointing north, with n1 = 0 and n2 = 1
+ if (nn1 = 0 and nn2 = 0) [ set nn2 1 ]
+ array:set DipDir 0 nn1
+ array:set DipDir 1 nn2
+ array:set DipDir 2 0
+
+ ; Make a new strike vector by rotating the Dip Direction vector in the XY plane negative 90 degrees
+ ; make a vertical vector parallel to Z up to act as the rotator
+let V array:from-list [0 0 1] ; changed from [0 0 -1] June 29, 2018
+
+ let vstrike spin Rn V DipDir
+
+ ; Get components of the strike vector
+ let s1 array:item vstrike 2
+ let s2 array:item vstrike 3
+ let s3 array:item vstrike 4
+
+ ;convert strike componets to a single array
+ let S array:from-list [0 0 0]
+  array:set S 0 s1
+  array:set S 1 s2
+  array:set S 2 s3
+
+; Now make the downdip vector by rotating the strike 90 degrees IN the plane of the feature,
+; that is the same as rotating about the normal of the feature
+let D spin Rn Normal S
+array:set DD 0  array:item D 2
+array:set DD 1  array:item D 3
+array:set DD 2  array:item D 4
+
+report DD
+
+end
+
+; Geometry Nearest Neighbour Estimator - Using Linear parameterized distance to Dip Data rotation
+; Defaults to Regional Dip outside of vision distance
+; Sim-Agentset = Local Agent to be updated Agent(s)
+; Data-Agentset = Controler Agent(s)
+; Data-Type = Type of Controler Agents (INT)
+; Modified Sept 13, 2019 no distance conditions all input agents evaluated
+; Set EV1 to a horizontal - Northeast directed vector
+; EV1 is usually the 1st Eigen Vector direction
+; Residual set to 1. User slider removed from main interface
+to Geom-Pair-Estimate [Geom-Receiver Geom-Controller Data-Type]
+
+ ask Geom-Receiver [
+
+    let D2D2 (distancexyz-nowrap [xcor] of Geom-Controller [ycor] of Geom-Controller [zcor] of Geom-Controller)
+
+       ; Get vector angle between Geom-Controller normal (source) and Geom-Controller normal (target)
+        let NT1 strdip2norm dstrike ddip doverturned
+        let NT2 strdip2norm [dstrike] of Geom-Controller [ddip] of Geom-Controller [doverturned] of Geom-Controller
+
+        let AT 0
+        let Rot 0
+        let FRot 0
+
+        set AT VectorAngle NT1 NT2
+
+        let VX array:from-list [0 0 0]
+        set VX cross NT1 NT2
+
+        ; Scale D2D2 so at residual t = 1 and at vision D2D2 = 0
+        ; Based on linear interpolator C = (1-t)*A + t*B
+        ; D2D2 = (1-t) * vision + t * residual
+        ; D2D2 = v - t*v + t*r
+        ; D2D2 - v = t*r - t*v
+        ; (D2D2 - v) = t * (r - v)
+        ; t =  (D2D2 - v) / (r - v)
+        ; Rot = t
+        ; Do a distance scaled rotation, if within the residual distance it will match ROT = 1 and vision distance is unchanged ROT = 0
+        ; Rotation weighted so dips blend into regional at vision distance and match exactly at residual distance
+
+
+
+        ; Avoid division by zero error
+        if (Dist2Centre = Separation) [set Separation Separation + .001 ]
+        set Rot ((D2D2 - Dist2Centre) / (Separation - Dist2Centre))
+        ;type "Rotation Amount     (0-1) : " type Rot type "\n"
+        set FRot (Rot * AT)
+        ; Do the rotation in 1 step
+        let GSLERP_Orientation spin FRot VX NT1
+
+                       set dstrike array:item GSLERP_Orientation 0
+                       set ddip array:item GSLERP_Orientation 1
+                       set n1 array:item GSLERP_Orientation 2
+                       set n2 array:item GSLERP_Orientation 3
+                       set n3 array:item GSLERP_Orientation 4
+                       set doverturned array:item GSLERP_Orientation 5
+                       set qqw array:item GSLERP_Orientation 6
+                       set qqx array:item GSLERP_Orientation 7
+                       set qqy array:item GSLERP_Orientation 8
+                       set qqz array:item GSLERP_Orientation 9
+                       set heading dstrike
+                       set roll  ddip
+                       set pitch  0
+
+
+
+
+
+  ]
+
+
+        let sym other data with [did = [did] of Geom-Receiver ]
+        update-dip sym Geom-Receiver 0
+
+
+end
+
+
+
+; IDW GeoVec Inverse Distance Geometry Vector estimator - Using group SLERP
+; for linear weighted parameterized distance to Dip Data rotation.
+; Defaults to Regional Dip outside of vision distance
+; Sim-Agentset = Local Agent(s) to be updated Agent
+; Data-Agentset = Controler Agent(s)
+; Data-Type = Type of Controler Agents (INT )
+to IDW-Geom-Estimate [Sim-Agentset Data-Agentset Data-Type]
+
+
+ask Sim-Agentset [
+    set active-agent self
+    ; Set up quaternion component variables
+    let SD_axis array:from-list [0 0 0]
+    let QuatW 0
+    let QuatX 0
+    let QuatY 0
+    let QuatZ 0
+
+    let IDW_Rot 0
+    let IDW_Vec array:from-list [0 0 0]
+    let SumD2Sim 0
+    let SimNorm array:from-list [(list n1 n2 n3)] of active-agent
+    ; load all the distances to the data neighbours with only the specified data type
+    set Data-Agentset Data-Agentset with [dtype = Data-Type and distancexyz-nowrap [xcor] of myself [ycor] of myself [zcor] of myself < Vision]
+
+    let n count Data-Agentset
+    ; Avoid div by zero when no dip agents are in the neighbourhood type "Dip Agents " type count Data-Agentset type
+    if (n > 0) [
+    let G matrix:make-constant n 8 0
+
+    ; Calculate the weights for each data point
+    ; Wi = 1 / (Di^2 * Sum(1/Dj^2))
+    ask Data-Agentset [ set D2Sim distancexyz-nowrap [xcor] of myself [ycor] of myself [zcor] of myself
+      ; To avoid later div by zero bug replace 0 with very small value ie. 0.000001
+        if (D2Sim = 0) [set D2Sim 0.000001]
+      ]
+
+    ; Order is not important here, just calculating a group value based on a sum of squares
+    let l [D2Sim] of Data-Agentset
+    ; use the map [] reporter since foreach will not report and can't change an internal list value directly
+    ;let ll map [ a -> 1 / (a ^ 2)]  l    ; Avoid div by zero here. Bug Sept 1, 2019
+    let ll map [ a -> 1 / (a ^ 3)]  l  ; Weights stronger for closer distances
+
+    set SumD2Sim sum ll
+    ; Change the interpolation distance weighting here if needed
+    ;ask Data-Agentset [ set weight 1 / ((D2Sim ^ 2) * SumD2Sim) ]
+    ask Data-Agentset [ set weight 1 / ((D2Sim ^ 3) * SumD2Sim) ] ; Weights stronger for closer distances
+
+     ; Check to see that your weights add to 1
+     let checkweight sum [weight] of Data-Agentset
+     ;type "Weights Total: " type checkweight  type "   Weights: " type [weight] of Data-Agentset type "\n\n"
+     ;type "l " type l type "     l^2    " type ll type "\n\n"
+     ;type "SumD2Sim :" type SumD2Sim type "\n\n"
+
+    ; Calculate the Quaternions for each data point in relation to the sim
+    ask Data-Agentset [ let DataNorm array:from-list (list n1 n2 n3)
+                        set SD_axis cross SimNorm DataNorm
+                        ; Note: Changing the spin axis to be the E1 Eigenvector direction
+                        ; requires evaluation of minimum spin angles to achieve a good rotation that is as close as possible
+                        ; to what can be acheived by useing teh cross of SimNorm and DataNorm. This angle is not easily estimated.
+                        let LRot VectorAngle SimNorm DataNorm
+                        let Local_Data_Orientation spin LRot SD_axis DataNorm
+
+                        set qqw array:item Local_Data_Orientation 6
+                        set qqx array:item Local_Data_Orientation 7
+                        set qqy array:item Local_Data_Orientation 8
+                        set qqz array:item Local_Data_Orientation 9
+                      ]
+; Load the properties of the agents so each matrix row represents one agent
+; Makes it faster when doing calculations
+set G matrix:from-row-list [(list n1 n2 n3 weight qqw qqx qqy qqz)] of Data-Agentset
+
+;print matrix:pretty-print-text G
+
+      ; Simple column x column multiplication NOT matrix multiplication (ie.  matrix:times M1 M2)
+
+    let G3 matrix:get-column G 3
+    let G4 matrix:get-column G 4
+    let G5 matrix:get-column G 5
+    let G6 matrix:get-column G 6
+    let G7 matrix:get-column G 7
+
+
+    ; map command NEEDS a list NOT an array
+    ; ie. (map [ [ x y ] -> x mod round y ] xs ys)  ; Needs the outer brackets to compile
+    let G3G4 (map [[a b] -> a * b] G3 G4)
+    let G3G5 (map [[a b] -> a * b] G3 G5)
+    let G3G6 (map [[a b] -> a * b] G3 G6)
+    let G3G7 (map [[a b] -> a * b] G3 G7)
+
+    set QuatW sum G3G4
+    set QuatX sum G3G5
+    set QuatY sum G3G6
+    set QuatZ sum G3G7
+
+    ; Convert back to a rotation angle in degrees and a rotation vector.
+
+    ; rotation axis estimated from IDW-SLERP
+    set IDW_Vec array:from-list (list QuatX QuatY QuatZ)
+    set IDW_Rot ( QuatW ) * 2
+
+    ; type "\n \n \t  IDW_Vec    " type IDW_Vec type " \n \t  IDW_Rot : " type IDW_Rot type "\n\n"
+
+     ; Do the rotation in 1 step
+        let IDW_SLERP_Orientation spin IDW_Rot IDW_Vec SimNorm
+
+                       set dstrike array:item IDW_SLERP_Orientation 0
+                       set ddip array:item IDW_SLERP_Orientation 1
+                       set n1 array:item IDW_SLERP_Orientation 2
+                       set n2 array:item IDW_SLERP_Orientation 3
+                       set n3 array:item IDW_SLERP_Orientation 4
+                       set doverturned array:item IDW_SLERP_Orientation 5
+                       set heading dstrike
+                       set roll  ddip
+                       set pitch  0
+
+        ; Update the symbolization
+        ask other data with [did = [did] of myself]
+                       [
+                         set dstrike [dstrike] of myself
+                         set ddip [ddip] of myself
+                         set n1 [n1] of myself
+                         set n2 [n2] of myself
+                         set n3 [n3] of myself
+                         set doverturned [doverturned] of myself
+                         set heading dstrike
+                         set roll  ddip
+                         set pitch  0
+
+                       ]
+  ]]
+
+end
+
+
+; Spin proceedure uses quaternions to rotate a vector ( or point set ) about an input vector axis with a specified rotation angle
+; A = rotation range in degrees,
+; Q = a rotation axis as a unit vector, (as an array)
+; P = a unit normal to a plane as an array
+; The plane is a planar structural element such as a bedding or fabric plane measured with strike and dip
+; returns RHR_Orientation array using Right Hand Rule planar orientation for STRIKE, DIP, N1, N2 ,N3, OVERTURNED
+; Importantly can be used to convert normal to strike and dip RHR by input A = 0 rotation and Q = P just cast the P as a single matrix from the normal
+to-report spin [ A Q P ]
+
+ ; Make the Normal to bedding matrix
+
+
+
+ let N matrix:from-column-list [[0 0 0]]
+ matrix:set N 0 0 array:item P 0
+ matrix:set N 1 0 array:item P 1
+ matrix:set N 2 0 array:item P 2
+
+ ; Use SLERP (Spherical Linear Interpolator) to rotate the observation set incremntally by 1 degree increments
+ ; with slow motion so user can see the effect.
+ ; Transform from Single vector to quaternion with rotation A about an axis Q
+
+let qw 0
+let q2w 0
+
+let qx 0
+let qy 0
+let qz 0
+let q2x 0
+let q2y 0
+let q2z 0
+
+let Rxx 0
+let Rxy 0
+let Rxz 0
+let Ryx 0
+let Ryy 0
+let Ryz 0
+let Rzx 0
+let Rzy 0
+let Rzz 0
+
+let RNx 0
+let RNy 0
+let RNZ 0
+let RLen 0
+
+let Rsimstrike 0
+let Rsimdip 0
+let Roverturned false
+let azimuth 0
+; RHR_Orientation: Right Hand Rule Orientation, direction cosine and quaternion parameters array
+; Right Hand Rule planar orientation for STRIKE, DIP, N1, N2 ,N3, OVERTURNED, qw, qx, qy, qz (last 4 elements are the quaternion)
+let RHR_Orientation array:from-list [0 0 0 0 0 0 0 0 0 0]
+
+; Make the rotation matrix
+let R matrix:from-row-list [[0 0 0] [0 0 0] [0 0 0]]
+
+;
+; Rotation Matrix  (eq.16 de Paor 1996)
+;
+;
+;
+;        |   Rxx      Rxy       Rxz    |
+;  R =   |   Ryx      Ryy       Ryz    |
+;        |   Rzx      Rzy      Rzz     |
+;
+;
+;
+;        |   q2w+q2x-q2y-q2z    2qxqy-2qzqw     2qzqx+2qyqw    |
+;  R =   |   2qxqy+2qzqw       q2w-q2x+q2y-q2z   2qyqz-2qwqx    |
+;        |   2qzqx-2qyqw       2qyqz+2qwqx    q2w-q2x-q2y+q2z   |
+;
+;
+;
+; q = s + iV
+; unit quaternion expression
+; q = s + ixVx + iyVy + izVz
+; q = (s,V) where s is the scalar component and V is the vector
+; u = (cos(A/2),sin(A/2)V)
+;          |qx|
+; q = ( qw,|qy| )
+;          |qz|
+;
+; qw = cos(A/2)  where A is the angle of rotation
+;
+; V =  (qx,qy,qz) where V is the rotation vector
+
+
+  set qx ( sin ( A / 2 ) * ( array:item Q 0 ))
+  set qy ( sin ( A / 2 ) * ( array:item Q 1 ))
+  set qz ( sin ( A / 2 ) * ( array:item Q 2 ))
+  set qw ( cos ( A / 2) )
+
+
+  ; (eq.17 de Paor 1996)
+  set q2w (1 - (qx ^ 2) - (qy ^ 2) - (qz ^ 2))
+
+  ; For a check on qw from previous calculation
+  ; qw  = sqrt(Rxx + Ryy + Rzz + 1) / 2 (eq.18a de Paor 1996)
+
+  set q2x qx ^ 2
+  set q2y qy ^ 2
+  set q2z qz ^ 2
+
+; Find all elements of the rotation matrix
+; Note that the rotation natrix will get recalculated for each input observation
+
+  ; Calculations verified with test pattern data set in R
+  set Rxx q2w + q2x - q2y - q2z
+  set Rxy (2 * qx * qy) - (2 * qz * qw)
+  set Rxz (2 * qz * qx) + (2 * qy * qw)
+  set Ryx (2 * qx * qy) + (2 * qz * qw)
+  set Ryy q2w - q2x + q2y - q2z
+  set Ryz (2 * qy * qz) - (2 * qw * qx)
+  set Rzx (2 * qz * qx) - (2 * qy * qw)
+  set Rzy (2 * qy * qz) + (2 * qw * qx)
+  set Rzz q2w - q2x - q2y + q2z
+
+ ; matrix element access format
+ ; matrix:set matrix row-i col-j new-value
+
+  matrix:set R 0 0 Rxx
+  matrix:set R 0 1 Rxy
+  matrix:set R 0 2 Rxz
+  matrix:set R 1 0 Ryx
+  matrix:set R 1 1 Ryy
+  matrix:set R 1 2 Ryz
+  matrix:set R 2 0 Rzx
+  matrix:set R 2 1 Rzy
+  matrix:set R 2 2 Rzz
+
+; Comment out if you need to see the rotation matrix
+; print matrix:pretty-print-text R
+
+
+; Apply the rotation to the normal vector
+; N is a normal vector passed to the spin proceedure
+; R - Code
+; N = R %*% N
+
+let RN matrix:times R N
+
+; derive all the other geometic elements from the new rotated normal vector
+
+    set RNx matrix:get RN 0 0
+    set RNy matrix:get RN 1 0
+    set RNz matrix:get RN 2 0
+
+    set RLen sqrt ((RNx ^ 2) + (RNy ^ 2) + (RNz ^ 2))
+    if (RLen = 0) [set RLen 0.0000001]  ; Avoid division by zero
+    set RNx (RNx / RLen)
+    set RNy (RNy / RLen)
+    set RNz (RNz / RLen)
+
+    ; Need to be careful about Nz (Z normal component)
+    ; If it is postive it needs to be changed to negative to point down into the earth
+    ; since no dips are going up into the air as a measurement
+
+    ; azimuth is dip direction (check for x,y both equal to zero and if true default to 0)
+
+ifelse (RNx = 0 and RNy = 0) [set azimuth 90] [set azimuth atan RNx RNy]
+
+    ;set Rsimdip acos abs RNz
+    set Rsimdip acos RNz
+
+
+    if (RNz = 0 and A = 0) [set Rsimdip 90 ]
+
+
+    ifelse (RNz < 0 ) [
+      set Roverturned  TRUE
+      set azimuth azimuth - 180
+      ; Not necessary to reflip dip value
+       set Rsimdip -1 * Rsimdip
+         ]
+       [ set Roverturned  false ]
+
+    ; Convert dip direction to strike and dip
+              if ( azimuth < 0 ) [ set azimuth 360 + azimuth ]
+              if ( azimuth  >=  90 ) [ set Rsimstrike azimuth - 90 ]
+              if ( azimuth < 90 ) [ set Rsimstrike  azimuth + 270 ]
+              if ( azimuth > 360) [ set Rsimstrike  -99999 ]
+
+
+   ; Return the new rotated orientation plane parameters
+   ; RHR_Orientation: Right Hand Rule Orientation, direction cosine and quaternion parameters array
+
+   array:set RHR_Orientation 0 precision Rsimstrike 1
+   array:set RHR_Orientation 1 precision Rsimdip 1
+   array:set RHR_Orientation 2 RNx
+   array:set RHR_Orientation 3 RNy
+   array:set RHR_Orientation 4 RNz
+   ifelse (Roverturned) [ array:set RHR_Orientation 5 true ] [ array:set RHR_Orientation 5 false ]
+   array:set RHR_Orientation 6 qw
+   array:set RHR_Orientation 7 qx
+   array:set RHR_Orientation 8 qy
+   array:set RHR_Orientation 9 qz
+
+
+  report RHR_Orientation
+
+end
+@#$#@#$#@
+GRAPHICS-WINDOW
+0
+0
+109
+110
+-1
+-1
+1.0
+1
+10
+1
+1
+1
+0
+1
+1
+1
+-50
+50
+-50
+50
+-50
+50
+1
+0
+1
+ticks
+30.0
+
+BUTTON
+46
+21
+109
+54
+NIL
+setup
+NIL
+1
+T
+OBSERVER
+NIL
+NIL
+NIL
+NIL
+1
+
+BUTTON
+124
+20
+202
+53
+NIL
+simulate
+T
+1
+T
+OBSERVER
+NIL
+NIL
+NIL
+NIL
+1
+
+INPUTBOX
+36
+190
+105
+250
+SwarmSize
+10.0
+1
+0
+Number
+
+SLIDER
+34
+308
+229
+341
+SimSize
+SimSize
+0
+5
+2.4
+.1
+1
+NIL
+HORIZONTAL
+
+SLIDER
+34
+345
+232
+378
+Motion
+Motion
+0
+1
+0.01
+.01
+1
+NIL
+HORIZONTAL
+
+SLIDER
+33
+481
+233
+514
+Dist2Centre
+Dist2Centre
+0
+150
+28.0
+1
+1
+NIL
+HORIZONTAL
+
+SLIDER
+33
+517
+232
+550
+ViewAngle
+ViewAngle
+0
+180
+92.0
+1
+1
+NIL
+HORIZONTAL
+
+SLIDER
+56
+560
+205
+593
+Separation
+Separation
+0
+30
+8.0
+1
+1
+NIL
+HORIZONTAL
+
+SLIDER
+35
+433
+230
+466
+Vision
+Vision
+0
+200
+13.0
+1
+1
+NIL
+HORIZONTAL
+
+CHOOSER
+36
+257
+229
+302
+Mode
+Mode
+"Particles" "Structure"
+1
+
+INPUTBOX
+107
+190
+173
+250
+Data-points
+3.0
+1
+0
+Number
+
+SLIDER
+56
+598
+206
+631
+Attractor
+Attractor
+-2
+2
+0.0
+.01
+1
+NIL
+HORIZONTAL
+
+SWITCH
+132
+108
+229
+141
+Symbolize
+Symbolize
+0
+1
+-1000
+
+INPUTBOX
+176
+190
+230
+250
+cellsize
+10.0
+1
+0
+Number
+
+SLIDER
+35
+398
+230
+431
+Sight
+Sight
+0
+200
+200.0
+1
+1
+NIL
+HORIZONTAL
+
+BUTTON
+80
+61
+161
+94
+Export Agents
+let io \"Agents_Export.vs\"\nlet op \"./\"\n;Edit this line to customize for local path...\n;let op \"C:/Data/Simulation/Test_Files/Folds/\"\ntype io type \"\\n\"\ntype op type \"\\n\"\n                                       \n  write-data data with [symbol = false and dtype = 3]  io op\n  
+NIL
+1
+T
+OBSERVER
+NIL
+NIL
+NIL
+NIL
+0
+
+SWITCH
+36
+151
+126
+184
+Scaling
+Scaling
+0
+1
+-1000
+
+SLIDER
+127
+151
+229
+184
+Scale-Factor
+Scale-Factor
+.5
+100
+5.1
+.1
+1
+NIL
+HORIZONTAL
+
+CHOOSER
+37
+102
+129
+147
+Test-File
+Test-File
+"A1" "A2" "A3" "A4" "No-File"
+0
+
+@#$#@#$#@
+## WHAT IS GeoSwarm?
+
+A demonstration of particle agents for modelling geological structures.
+Several data files are used as test scenarios representing simple 2 to 4 point data sets taken from opposing steep dipping fold limbs. 
+
+Developed in NetLogo 3D 6.0.4
+
+June 8, 2020
+Ottawa, Canada
+
+## HOW IT WORKS
+
+There are 2 modes. The first mode "Particles" (choose Mode=Particles for this) to show how particles with only a simple rule, that is; proximity to the centre of the model, in a randomly moving field behave. Particle size is controlled with SimSize and is strictly for visualization. If a particle is within the distance to centre criteria, it turns red, if it goes out it turns blue. All particles have been set to bounce off the model walls as they would in a physical setting.
+ 
+With the second, the "Structure" setting (Mode = Structure), graphics are represented as 3D hexagonal data and simulated structure points. The hexagons have sides reflecting an up, blue and down side, red for fixed control data and smaller hexagons that represent estimations or simulations of the structural field at discrete moving locations. These simulated structural symbols have a yellow face for up and a green for down. When these structural point simulations are near the data the yellow sides should correspond with the light blue face of data and the green of the sims should be matching the topology of the red side of the data points.
+
+
+A stuctural particle agentset is given a random 3D location, and an axis of rotation equivalent to its surface normal. 
+
+Each particle becomes preferentially attracted to its closest neighbour along its equatorial plane. The sensing angle is the angle from the equatorial that the particles can see others. Moving structural agents can see others within the Sight distance. As the vector angle between the neighbour direction and the particle normal gets to 90 degrees, the attraction becomes amplified. This tends to create swarm(s) of agents that develop along an imaginary surface. 
+
+Each particle maintains a minimum equatorial and polar distance to its neighbour set by the Separation slider. 
+
+Each particle is repelled with the greatest force in the direction away from the particle equator. 
+
+The structural agents will migrate to the Data points (bigger red and blue hexagons) and try to maintain an internal cohesion as a swarm while doing this. There is a constant trade off between respecting the fixed data orientation and the local conformity of agents to their neighbours. All estimations of orientation are minimum distance based using rotated quaternions, with the algorithm called IDW-SLERP. See text and calculations in the appendix of the adjoining paper from Mathematical Geosciences Surface Agents for Geological Surface Modelling by Eric A. de Kemp, GSC, 2020.  
+
+
+## HOW TO USE IT
+
+
+Try using the A1 data set with a SwarmSize of 25 agents, set the CellSize to 25 as well. This will create a single swarm. Put scaling on to spread the data through the model space and set the Scale-Factor to 5.0. Train on this data to make a single fold closure by tunning the distance parameters listed below.
+
+Setup = Initiates the data and agent loadings.
+
+Data-points = Total number of fixed on contact planar orientation points. Represents for example, a bedding observation of a geological horizon. Is active only When Test-File = "No-File". 
+
+CellSize = The number of agents in an individual swarm.
+
+
+Simulate = Push to initiate the swarming behavior of structural agents. 
+
+Export Agents = Push to write out ascii file of Gocad/SKUA comatible point (vs) file. Contains records for each  data point and structural simulated agent with its spatial (X,Y,Z) and normal (n1,n2,n3) components.
+
+Test-File = No-File, A1 - 2 point antiform, A2 - 4 point antiform, A3 - 2 point synform, A4 - variably plunging upright synform/antifom inflection pair.
+
+Symbolize = On/Off
+
+Scaling = On/Off (Off will disable the Scale-Factor slider)
+
+Scale-Factor = Factor for increasing or decreasing extend of data relative to model space. Used to show the off data extension effects of agents.
+
+SimSize = Symbolization factor for size of Hexagons. 
+
+SwarmSize = Number of simulated structural points.
+
+Data-Points = Number of random Data points used for testing with mode= "No-File".
+
+Motion = Forward motion incrementor.
+
+Sight = Distance buffer for structural inter-agent swarm member detection.
+
+Vision = Distance buffer for detection of data by structural search agents.
+
+Dist2Centre = Proximity to the moxel centre at (X,Y,Z = 0,0 0).
+
+ViewAngle = Angle around the normal that agents can see other agents. 180 degrees is full visibility for 180 degrees up and down.
+
+Separation = Minimum alowed distance between agents.
+
+Attraction = Attraction or repulsion of agents. 
+
+
+## THINGS TO NOTICE
+
+Notice how agents cluster and get re-oriented as they come into proximity with data. Also, to themselves. See how the distance parameters for Sight, Vision and Separation control how agents respond as a swarm, or as far off individuals. See if setting the attraction variable can bring the swarm to the data or to each other better.
+
+All the Eigenvector geometry characteristics of the data are summarized in the matrix output in the command centre window. Expand the command centre window to see these results as well as the output matrix from an export. Notice the red eigenvector, in the centre 3D view, will generally point down plunge consistent with how the data is rotated. See if this down plunge orientation can be maintained in the emerging agent structures as each fold is modelled.
+
+## THINGS TO TRY
+
+
+In Particle mode, adjust the Dist2Centre untill particles change color, depending on how close they are to the centre of the model. Increase the number of agents with the SwarmSize value to 200. Note how the model slows down as each new agent adds more computatioanl requirements. Note how the model slows down as the distance to Centre is increased. Each new rule, new agent, the complexity of the rule and the interaction of agents will increase the compute requirements.
+
+
+Try to develop an agent driven interpretation by interactively tunning the parameters in order to make a geologically reasonable model of the simple fold scenarios presented in the data files A1-4. Change the code to input other simple geological orientation data. Rescale the data if the data is too clustered or localized. Export the results and visualize in other 3D modelling packages such as Gocad/SKUA and interpolate the simulated structures with an implicit calculator to see the effects of the agent approach. 
+
+
+## EXTENDING THE MODEL
+
+Try to increase the cohesion of the model. It is difficult to produce more realistic flying carpet like models, representing continuous surfaces a structural geologist might imagine, without going to a full meshing code. 
+
+How do we introduce discontinuities into the swarm? With bariers such as faults, intrusions and erosion surfaces that tend to disrupt structural vector fields for things like horizon features. How can we create more complex forms with nested swarm behaviors?
+How would physical properties from geophysics, or mechanics (such as rheology) be incorporated into the agent behavior. How would we add thickness constraints, material strength properties for stiffness, or fluid like flow for intrusive bodies? What would a simple test case look like? 
+
+Can other fabric elements, linear elements representing the trends and plunges of regional fold hinges be visualized and modelled to help support mountain belt scale modelling?  
+
+
+## NETLOGO FEATURES
+
+New symbology was created for representing planar orientation observations. These are encoded in the "3d_HexShape.txt" file. This file is necessary to visualize the agent effects. 
+
+A host of new proceedure calls was developed for a wide range of 3D vector geometry manipulations and sensors, all too numerous to note here. See the comments in the code for details. The important ones are "Spin" which does the quaternion rotation of structural data during estimation. This is better documented in the adjoining paper appendix. Also, the proceedure Swarming based on the original Flocking codes is adapted to create the structural surface swarming behavior demonstrated here. 
+
+## RELATED MODELS
+
+Flocking, WaveMachine3D
+
+## CREDITS AND REFERENCES
+
+Interested individuals who wish to further this research please contact; 
+
+Eric A. de Kemp
+Geological Survey of Canada, three-dimensional Earth Imaging and Modelling Lab 
+601 Booth Street, Ottawa, Canada, K0E 1E9
+E-mail:  eric.dekemp@canada.ca
+https://orcid.org/0000-0003-0347-5792
+
+
+Project Sites:
+
+https://github.com/Loop3D/GeoSwarm.git
+
+https://loop3d.org/ 
+https://www.ring-team.org/
+https://www.pdgm.com/products/skua-gocad/
+
+References:
+
+de Kemp E.A. (2020) Spatial Agents for Geological Surface Modelling, Mathematical Geosciences, (Submitted) 
+
+De Paor D G (1995) Quaternions, raster shears, and the modeling of rotations in structural and tectonic studies. In: Proceedings and abstracts: Geological Society of America, (New Orleans, LA, United States, November 6-9) 27(6):72
+
+Wilensky U, Rand W (2015) An Introduction to Agent Based Modeling - Modeling Natural, Social and Engineered Complex Systems with Netlogo. Massachusetts Institute of Technology.  ISBN-10: 0262731894
+
+Wilensky U (1998) NetLogo Flocking model.  http://ccl.northwestern.edu/netlogo/models/Flocking,  Center for Connected Learning and Computer-Based Modeling, Northwestern University, Evanston, IL. 
+
+Wilensky U (1996) NetLogo Wave Machine 3D model. http://ccl.northwestern.edu/netlogo/models/WaveMachine3D, Center for Connected Learning and Computer-Based Modeling, Northwestern University, Evanston, IL.
+
+Wilensky U (1999) NetLogo. http://ccl.northwestern.edu/netlogo, Center for Connected Learning and Computer-Based Modeling, Northwestern University, Evanston, IL. NetLogo Home page: http://ccl.northwestern.edu/netlogo/
+
+Woodcock N H (1977) Specification of Fabric Shapes using an eigenvalue method. Geological Society of America Bulletin 88:1231-1236 
+
+
+@#$#@#$#@
+default
+true
+0
+Polygon -7500403 true true 150 5 40 250 150 205 260 250
+
+airplane
+true
+0
+Polygon -7500403 true true 150 0 135 15 120 60 120 105 15 165 15 195 120 180 135 240 105 270 120 285 150 270 180 285 210 270 165 240 180 180 285 195 285 165 180 105 180 60 165 15
+
+arrow
+true
+0
+Polygon -7500403 true true 150 0 0 150 105 150 105 293 195 293 195 150 300 150
+
+box
+false
+0
+Polygon -7500403 true true 150 285 285 225 285 75 150 135
+Polygon -7500403 true true 150 135 15 75 150 15 285 75
+Polygon -7500403 true true 15 75 15 225 150 285 150 135
+Line -16777216 false 150 285 150 135
+Line -16777216 false 150 135 15 75
+Line -16777216 false 150 135 285 75
+
+bug
+true
+0
+Circle -7500403 true true 96 182 108
+Circle -7500403 true true 110 127 80
+Circle -7500403 true true 110 75 80
+Line -7500403 true 150 100 80 30
+Line -7500403 true 150 100 220 30
+
+butterfly
+true
+0
+Polygon -7500403 true true 150 165 209 199 225 225 225 255 195 270 165 255 150 240
+Polygon -7500403 true true 150 165 89 198 75 225 75 255 105 270 135 255 150 240
+Polygon -7500403 true true 139 148 100 105 55 90 25 90 10 105 10 135 25 180 40 195 85 194 139 163
+Polygon -7500403 true true 162 150 200 105 245 90 275 90 290 105 290 135 275 180 260 195 215 195 162 165
+Polygon -16777216 true false 150 255 135 225 120 150 135 120 150 105 165 120 180 150 165 225
+Circle -16777216 true false 135 90 30
+Line -16777216 false 150 105 195 60
+Line -16777216 false 150 105 105 60
+
+car
+false
+0
+Polygon -7500403 true true 300 180 279 164 261 144 240 135 226 132 213 106 203 84 185 63 159 50 135 50 75 60 0 150 0 165 0 225 300 225 300 180
+Circle -16777216 true false 180 180 90
+Circle -16777216 true false 30 180 90
+Polygon -16777216 true false 162 80 132 78 134 135 209 135 194 105 189 96 180 89
+Circle -7500403 true true 47 195 58
+Circle -7500403 true true 195 195 58
+
+circle
+false
+0
+Circle -7500403 true true 0 0 300
+
+circle 2
+false
+0
+Circle -7500403 true true 0 0 300
+Circle -16777216 true false 30 30 240
+
+cow
+false
+0
+Polygon -7500403 true true 200 193 197 249 179 249 177 196 166 187 140 189 93 191 78 179 72 211 49 209 48 181 37 149 25 120 25 89 45 72 103 84 179 75 198 76 252 64 272 81 293 103 285 121 255 121 242 118 224 167
+Polygon -7500403 true true 73 210 86 251 62 249 48 208
+Polygon -7500403 true true 25 114 16 195 9 204 23 213 25 200 39 123
+
+cylinder
+false
+0
+Circle -7500403 true true 0 0 300
+
+dot
+false
+0
+Circle -7500403 true true 90 90 120
+
+face happy
+false
+0
+Circle -7500403 true true 8 8 285
+Circle -16777216 true false 60 75 60
+Circle -16777216 true false 180 75 60
+Polygon -16777216 true false 150 255 90 239 62 213 47 191 67 179 90 203 109 218 150 225 192 218 210 203 227 181 251 194 236 217 212 240
+
+face neutral
+false
+0
+Circle -7500403 true true 8 7 285
+Circle -16777216 true false 60 75 60
+Circle -16777216 true false 180 75 60
+Rectangle -16777216 true false 60 195 240 225
+
+face sad
+false
+0
+Circle -7500403 true true 8 8 285
+Circle -16777216 true false 60 75 60
+Circle -16777216 true false 180 75 60
+Polygon -16777216 true false 150 168 90 184 62 210 47 232 67 244 90 220 109 205 150 198 192 205 210 220 227 242 251 229 236 206 212 183
+
+fish
+false
+0
+Polygon -1 true false 44 131 21 87 15 86 0 120 15 150 0 180 13 214 20 212 45 166
+Polygon -1 true false 135 195 119 235 95 218 76 210 46 204 60 165
+Polygon -1 true false 75 45 83 77 71 103 86 114 166 78 135 60
+Polygon -7500403 true true 30 136 151 77 226 81 280 119 292 146 292 160 287 170 270 195 195 210 151 212 30 166
+Circle -16777216 true false 215 106 30
+
+flag
+false
+0
+Rectangle -7500403 true true 60 15 75 300
+Polygon -7500403 true true 90 150 270 90 90 30
+Line -7500403 true 75 135 90 135
+Line -7500403 true 75 45 90 45
+
+flower
+false
+0
+Polygon -10899396 true false 135 120 165 165 180 210 180 240 150 300 165 300 195 240 195 195 165 135
+Circle -7500403 true true 85 132 38
+Circle -7500403 true true 130 147 38
+Circle -7500403 true true 192 85 38
+Circle -7500403 true true 85 40 38
+Circle -7500403 true true 177 40 38
+Circle -7500403 true true 177 132 38
+Circle -7500403 true true 70 85 38
+Circle -7500403 true true 130 25 38
+Circle -7500403 true true 96 51 108
+Circle -16777216 true false 113 68 74
+Polygon -10899396 true false 189 233 219 188 249 173 279 188 234 218
+Polygon -10899396 true false 180 255 150 210 105 210 75 240 135 240
+
+hexbase3d
+true
+0
+
+hexbasesides3d
+true
+0
+
+hextop3d
+true
+0
+Polygon -7500403 true true 90 60 210 60 255 150 210 240 90 240 45 150
+
+hextopsides3d
+true
+0
+
+house
+false
+0
+Rectangle -7500403 true true 45 120 255 285
+Rectangle -16777216 true false 120 210 180 285
+Polygon -7500403 true true 15 120 150 15 285 120
+Line -16777216 false 30 120 270 120
+
+leaf
+false
+0
+Polygon -7500403 true true 150 210 135 195 120 210 60 210 30 195 60 180 60 165 15 135 30 120 15 105 40 104 45 90 60 90 90 105 105 120 120 120 105 60 120 60 135 30 150 15 165 30 180 60 195 60 180 120 195 120 210 105 240 90 255 90 263 104 285 105 270 120 285 135 240 165 240 180 270 195 240 210 180 210 165 195
+Polygon -7500403 true true 135 195 135 240 120 255 105 255 105 285 135 285 165 240 165 195
+
+line
+true
+0
+Line -7500403 true 150 0 150 300
+
+line half
+true
+0
+Line -7500403 true 150 0 150 150
+
+pentagon
+false
+0
+Polygon -7500403 true true 150 15 15 120 60 285 240 285 285 120
+
+person
+false
+0
+Circle -7500403 true true 110 5 80
+Polygon -7500403 true true 105 90 120 195 90 285 105 300 135 300 150 225 165 300 195 300 210 285 180 195 195 90
+Rectangle -7500403 true true 127 79 172 94
+Polygon -7500403 true true 195 90 240 150 225 180 165 105
+Polygon -7500403 true true 105 90 60 150 75 180 135 105
+
+plant
+false
+0
+Rectangle -7500403 true true 135 90 165 300
+Polygon -7500403 true true 135 255 90 210 45 195 75 255 135 285
+Polygon -7500403 true true 165 255 210 210 255 195 225 255 165 285
+Polygon -7500403 true true 135 180 90 135 45 120 75 180 135 210
+Polygon -7500403 true true 165 180 165 210 225 180 255 120 210 135
+Polygon -7500403 true true 135 105 90 60 45 45 75 105 135 135
+Polygon -7500403 true true 165 105 165 135 225 105 255 45 210 60
+Polygon -7500403 true true 135 90 120 45 150 15 180 45 165 90
+
+sheep
+false
+15
+Circle -1 true true 203 65 88
+Circle -1 true true 70 65 162
+Circle -1 true true 150 105 120
+Polygon -7500403 true false 218 120 240 165 255 165 278 120
+Circle -7500403 true false 214 72 67
+Rectangle -1 true true 164 223 179 298
+Polygon -1 true true 45 285 30 285 30 240 15 195 45 210
+Circle -1 true true 3 83 150
+Rectangle -1 true true 65 221 80 296
+Polygon -1 true true 195 285 210 285 210 240 240 210 195 210
+Polygon -7500403 true false 276 85 285 105 302 99 294 83
+Polygon -7500403 true false 219 85 210 105 193 99 201 83
+
+square
+false
+0
+Rectangle -7500403 true true 30 30 270 270
+
+square 2
+false
+0
+Rectangle -7500403 true true 30 30 270 270
+Rectangle -16777216 true false 60 60 240 240
+
+star
+false
+0
+Polygon -7500403 true true 151 1 185 108 298 108 207 175 242 282 151 216 59 282 94 175 3 108 116 108
+
+target
+false
+0
+Circle -7500403 true true 0 0 300
+Circle -16777216 true false 30 30 240
+Circle -7500403 true true 60 60 180
+Circle -16777216 true false 90 90 120
+Circle -7500403 true true 120 120 60
+
+tree
+false
+0
+Circle -7500403 true true 118 3 94
+Rectangle -6459832 true false 120 195 180 300
+Circle -7500403 true true 65 21 108
+Circle -7500403 true true 116 41 127
+Circle -7500403 true true 45 90 120
+Circle -7500403 true true 104 74 152
+
+triangle
+false
+0
+Polygon -7500403 true true 150 30 15 255 285 255
+
+triangle 2
+false
+0
+Polygon -7500403 true true 150 30 15 255 285 255
+Polygon -16777216 true false 151 99 225 223 75 224
+
+truck
+false
+0
+Rectangle -7500403 true true 4 45 195 187
+Polygon -7500403 true true 296 193 296 150 259 134 244 104 208 104 207 194
+Rectangle -1 true false 195 60 195 105
+Polygon -16777216 true false 238 112 252 141 219 141 218 112
+Circle -16777216 true false 234 174 42
+Rectangle -7500403 true true 181 185 214 194
+Circle -16777216 true false 144 174 42
+Circle -16777216 true false 24 174 42
+Circle -7500403 false true 24 174 42
+Circle -7500403 false true 144 174 42
+Circle -7500403 false true 234 174 42
+
+turtle
+true
+0
+Polygon -10899396 true false 215 204 240 233 246 254 228 266 215 252 193 210
+Polygon -10899396 true false 195 90 225 75 245 75 260 89 269 108 261 124 240 105 225 105 210 105
+Polygon -10899396 true false 105 90 75 75 55 75 40 89 31 108 39 124 60 105 75 105 90 105
+Polygon -10899396 true false 132 85 134 64 107 51 108 17 150 2 192 18 192 52 169 65 172 87
+Polygon -10899396 true false 85 204 60 233 54 254 72 266 85 252 107 210
+Polygon -7500403 true true 119 75 179 75 209 101 224 135 220 225 175 261 128 261 81 224 74 135 88 99
+
+wheel
+false
+0
+Circle -7500403 true true 3 3 294
+Circle -16777216 true false 30 30 240
+Line -7500403 true 150 285 150 15
+Line -7500403 true 15 150 285 150
+Circle -7500403 true true 120 120 60
+Line -7500403 true 216 40 79 269
+Line -7500403 true 40 84 269 221
+Line -7500403 true 40 216 269 79
+Line -7500403 true 84 40 221 269
+
+wolf
+false
+0
+Polygon -16777216 true false 253 133 245 131 245 133
+Polygon -7500403 true true 2 194 13 197 30 191 38 193 38 205 20 226 20 257 27 265 38 266 40 260 31 253 31 230 60 206 68 198 75 209 66 228 65 243 82 261 84 268 100 267 103 261 77 239 79 231 100 207 98 196 119 201 143 202 160 195 166 210 172 213 173 238 167 251 160 248 154 265 169 264 178 247 186 240 198 260 200 271 217 271 219 262 207 258 195 230 192 198 210 184 227 164 242 144 259 145 284 151 277 141 293 140 299 134 297 127 273 119 270 105
+Polygon -7500403 true true -1 195 14 180 36 166 40 153 53 140 82 131 134 133 159 126 188 115 227 108 236 102 238 98 268 86 269 92 281 87 269 103 269 113
+
+wolf 7
+false
+0
+Circle -16777216 true false 183 138 24
+Circle -16777216 true false 93 138 24
+Polygon -7500403 true true 30 105 30 150 90 195 120 270 120 300 180 300 180 270 210 195 270 150 270 105 210 75 90 75
+Polygon -7500403 true true 255 105 285 60 255 0 210 45 195 75
+Polygon -7500403 true true 45 105 15 60 45 0 90 45 105 75
+Circle -16777216 true false 90 135 30
+Circle -16777216 true false 180 135 30
+Polygon -16777216 true false 120 300 150 255 180 300
+
+x
+false
+0
+Polygon -7500403 true true 270 75 225 30 30 225 75 270
+Polygon -7500403 true true 30 75 75 30 270 225 225 270
+@#$#@#$#@
+NetLogo 3D 6.0.4
+@#$#@#$#@
+need-to-manually-make-preview-for-this-model
+@#$#@#$#@
+@#$#@#$#@
+@#$#@#$#@
+@#$#@#$#@
+default
+0.0
+-0.2 0 0.0 1.0
+0.0 1 1.0 0.0
+0.2 0 0.0 1.0
+link direction
+true
+0
+Line -7500403 true 150 150 90 180
+Line -7500403 true 150 150 210 180
+
+
+0.0
+-0.2 0 0.0 1.0
+0.0 1 1.0 0.0
+0.2 0 0.0 1.0
+link direction
+true
+0
+Line -7500403 true 150 150 90 180
+Line -7500403 true 150 150 210 180
+@#$#@#$#@
+0
+@#$#@#$#@

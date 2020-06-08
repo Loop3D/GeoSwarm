@@ -2,13 +2,13 @@
 ;Created by: Sarah D'Ettorre
 ;Modified by: Eric de Kemp
 ;References: Mesh_April_2013 by Eric de Kemp
-;            Any references used for particular functions are listed in the 
+;            Any references used for particular functions are listed in the
 ;            header for that function
 
 ;Description: A simple agent based surface meshing demo
 ;Notes: Uses triangles and node connection rules to make an interconnected mesh.
 
-;Instructions: 
+;Instructions:
 ; 1) Set any sliders or input buttons as desired.
 ;    *** for a nice demo, use the following parameters:
 ;        Num_Poly: 15
@@ -23,50 +23,50 @@
 
 extensions [array matrix]
 
-;  
+;
 ;
 ;DESCRIPTION: Procedure meta-data template header
 ;
-;Date : 
+;Date :
 ;
-;Author: 
+;Author:
 ;
-;RETURN VALUE: 
+;RETURN VALUE:
 ;
-;PARAMETERS: 
+;PARAMETERS:
 ;
-;CALLED BY: 
+;CALLED BY:
 ;
-;CALLS: 
+;CALLS:
 
 
 ; Set up global variables
-globals 
-[  
-  
+globals
+[
+
   hit_count  ;number of times a free unmeshed triangle node repeatably hits a wall
   start_node ;first vertex of a polygon, used during poly creation
   next_node  ;next identified vertex of a polygon, used during poly creation
   regional-centre ; global barycentre of all masses
   seed       ;the open edge selected for fusion with another edge
   origin     ;the original seed
-  neighbour  ;the open edge selected for fusion with the seed   
-  index ; topology index showing goodness of meshing    
+  neighbour  ;the open edge selected for fusion with the seed
+  index ; topology index showing goodness of meshing
   before-index ;
   after-index  ;
   mesh_count ; number of fully meshed triangles
-  meshed_triangle ; temp triangle set for local switching  
+  meshed_triangle ; temp triangle set for local switching
   mesh_quality ; poor = 0, 1 = best
   the_end    ; boolean variable set to true if the user has pressed the stop button
-  proximity ; Distance to data 
+  proximity ; Distance to data
   RegBary_XYZ ; RegBary_XYZ the Regional Barycentre as list of coordinates 0=X,1=Y,2=Z on the list
-  free_polys ; Polygons with all sides free 
+  free_polys ; Polygons with all sides free
 ]
 
 
 ;set up Agents
 ;Data Agents
-breed [Ons On] ; Data on surface constraint points 
+breed [Ons On] ; Data on surface constraint points
 
 ;Model Agent constructors
 breed [nodes node]
@@ -88,43 +88,43 @@ nodes-own [
              Poly_ID       ;list of polyIDs that this node belongs to, a list of numbers not agents
                            ;Importantly this is a list so nodes can belong to many polygons
                            ;length of list Poly_ID determines how many sides each poly has
-             Node_ID       ; vertex id starting at 0 for begining of polygon and n for last point on chain              
+             Node_ID       ; vertex id starting at 0 for begining of polygon and n for last point on chain
              mass          ;property of a node that can act as an attractor
              direction     ; a switch for forward = 1 or backward = -1 or stopped = 0 (close to data)
              closed        ; closed 1 - closed (2 links on a node)
-             closest-friend 
-             farthest-friend 
-             ]               
+             closest-friend
+             farthest-friend
+             ]
 
-centres-own 
+centres-own
 [
   Norm_X       ; Direction cosine X (-1 to 1)
   Norm_Y       ; Direction cosine Y (-1 to 1)
   Norm_Z       ; Direction cosine Z (-1 to 1)
-  Norm_ID      ; 0 for the point on the plane and 1 for the point above 
-  Centre_ID    ; ID of the triangle 
+  Norm_ID      ; 0 for the point on the plane and 1 for the point above
+  Centre_ID    ; ID of the triangle
   Nearest_On   ; The nearest On surface constraint data
-  Dist2Data    ; Distance to a Data point  
+  Dist2Data    ; Distance to a Data point
 ]
 
-; Eventually triangles will be replaced by a polyhedra with a node list 
+; Eventually triangles will be replaced by a polyhedra with a node list
 triangles-own
 [
-  PolyID_t     ;the ID of the triangle a single triangle 
+  PolyID_t     ;the ID of the triangle a single triangle
   node1
   node2
   node3
   shared_edges ;number of edges shared with another triangle
-  status       ; -1 = unknown , 0 = free, 1 = meshed, 2 = high quality meshed 
+  status       ; -1 = unknown , 0 = free, 1 = meshed, 2 = high quality meshed
   ; CHECK if agent owned variables can be the same for duplicate agents AND if these are local to an agent
-  
+
 ]
 
 
 
-edges-own 
+edges-own
 [
-  Edge_ID      ; 0 = 0->1, 1 = 1->2, 2 = 2->0   
+  Edge_ID      ; 0 = 0->1, 1 = 1->2, 2 = 2->0
   PolyID       ;the ID of the internal triangle, a single number
   sharedEdge   ;the Edge_ID of the shared edge, -1 if none
   sharedPoly   ;the PolyID of the shared edge, -1 if none
@@ -137,8 +137,8 @@ Data_links-own
 Data_ID        ; Data link type 0 = On surface
 ]
 
-;DESCRIPTION: This function sets up the environment by clearing any thing 
-;             previously in it, initializing the global variables and populating 
+;DESCRIPTION: This function sets up the environment by clearing any thing
+;             previously in it, initializing the global variables and populating
 ;             the environment with the number of triangles selected by the user.
 ;
 ;RETURN VALUE: none
@@ -149,59 +149,59 @@ Data_ID        ; Data link type 0 = On surface
 ;
 ;CALLS: none
 
-to setup 
-  
+to setup
+
   clear-all
-  
-  
-  
+
+
+
   if Num_Poly > 0
   [
   ;orient the cube as desired
   ;zoom 5
   ;orbit-down 50
-  ;orbit-left 90   
- 
+  ;orbit-left 90
+
   ;initialize global variables
-  
-  set start_node nobody 
+
+  set start_node nobody
   set next_node nobody
   set regional-centre nobody
   set seed nobody
   set index 0 ; topology index showing goodness of meshing
-  set before-index 0 
+  set before-index 0
   set after-index 0
   set origin nobody
-  set neighbour nobody  
-  set free_polys nobody 
+  set neighbour nobody
+  set free_polys nobody
   set mesh_quality 0
-  set mesh_count 0 
+  set mesh_count 0
   set proximity max-pxcor
-  
+
   ;populate with triangles
-  let tcount 0  
+  let tcount 0
   while [tcount < Num_Poly ]
   [
     ; Changed from make-triangles
     make_polygon tcount
     ;Makes the polygons flat, minimum energy state for given segement lengths
     repeat sides  ^ 3 [perturb-poly nodes with [closed = 1 and item 0 Poly_ID = tcount]]
-    set tcount tcount + 1       
+    set tcount tcount + 1
   ]
-  
+
   ask triangles [set shared_edges 0 set status -1]
-  
-  
- 
+
+
+
   if labels [label_all]
   if On_Surface > 0 [make_on]
-  
-  
+
+
   reset-ticks
 ]
 end
 
-;DESCRIPTION: This function flips the_end to 1 (true) allowing the go function to 
+;DESCRIPTION: This function flips the_end to 1 (true) allowing the go function to
 ;             stop the simulation.
 ;
 ;RETURN VALUE: none
@@ -213,14 +213,14 @@ end
 ;CALLS: none
 
 to stop_button
-  
+
   set the_end 1
-  
+
 end
 
 
 ;DESCRIPTION: Controls the program (like a driver) by calling each function in turn
-;             and keeping track of ticks. This function loops forever until 
+;             and keeping track of ticks. This function loops forever until
 ;             stopped by the user.
 ;
 ;RETURN VALUE: none
@@ -229,75 +229,75 @@ end
 ;
 ;CALLED BY: "Launch" button
 ;
-;CALLS: label_all, perturb, update, selectNeighbour, selectNextSeed, zipHex, 
+;CALLS: label_all, perturb, update, selectNeighbour, selectNextSeed, zipHex,
 ;       tangled, setup, go
 
-to go   
+to go
 
 ;Must be at least 1 polygon
 if Num_Poly > 0
   [
-    
+
   let free_nodes 0
 
   if the_end = 1 [ stop ]
 
   if labels [label_all]
- 
-   perturb 
-   update  
- 
-   
-   if mesh [   
-          ;repeat Num_Poly [perturb]  
-          
-          
-           
-          
+
+   perturb
+   update
+
+
+   if mesh [
+          ;repeat Num_Poly [perturb]
+
+
+
+
           ; must be at least 2 polygons to make a mesh
           if (Num_Poly > 1 and mesh_count < Num_Poly) [
-               
-              
-              
+
+
+
               ; PROBLEM HERE infinite loop not yet identified MArch 4, 2014
-              selectNeighbour 
-              
-              
-                
+              selectNeighbour
+
+
+
               selectNextSeed
-              
-              
-  
+
+
+
               ; Jan 29, 2014 Attempt to make a new proceedure 'Fill' inserted in the pre-fusion meshing workflow
-              ; Proceedure is called by selectNeighbour just before fusing 
-            
-              zipHex  
+              ; Proceedure is called by selectNeighbour just before fusing
+
+              zipHex
               ;Fill
-              
-              
-          
+
+
+
           ]
-          
-        repeat 1 [SmoothBorder]    
-   
+
+        repeat 1 [SmoothBorder]
+
    ]
-  
-  tick 
-  
+
+  tick
+
   ;the end = 200 ticks past the point of all triangles being attached
   ;ie. the number of triangles + 200 ticks have occurred
   ;if at the end, the mesh is tangled, throw it away and re-try
-  if (ticks = 500 + Num_Poly and all? triangles [shared_edges > 0]) 
+  if (ticks = 500 + Num_Poly and all? triangles [shared_edges > 0])
   [
    if tangled = 1
    [
     __clear-all-and-reset-ticks
     setup
-    go 
+    go
    ]
   ]
   ]
-  
+
 end
 
 ;DESCRIPTION: Shows triangle ID labels in the envirnoment. This is useful mostly
@@ -312,19 +312,19 @@ end
 ;CALLS: none
 
 to label_all
-  
+
  ;ask centres with [Norm_ID = 0][set label Centre_ID]
-  
- ;ask edges [set label sharedEdge print sharedEdge] 
- ;ask edges [print fromNode print [who] of fromNode] 
+
+ ;ask edges [set label sharedEdge print sharedEdge]
+ ;ask edges [print fromNode print [who] of fromNode]
  ;ask edges [print toNode print [who] of toNode ]
- 
+
  ;; Problem Here .... sharedEdge does not have the right values
  ;; should be set to the Edge_ID of the shared edge (0,1,2) but is a node pair instead.
- ;; 
- 
+ ;;
+
  ask nodes [set label Poly_ID set label-color gray ]
- 
+
  ;ask edges [set label-color white set label sharedEdge print sharedEdge]
  ;ask edges [set label Edge_ID print Edge_ID]
  ;ask triangles [set label-color white set label PolyID_t]
@@ -337,78 +337,78 @@ to-report tnode-check
    ;print " Time stamp node check - " show date-and-time
    let error-code 0
    ask triangles  [
-      
-                
-         ;Check  for bad triangle node scheme 
-        
+
+
+         ;Check  for bad triangle node scheme
+
          ;print "Checking tnodes ..."
-        
-         
+
+
          if (node1 = node2 or node1 = node3 or node2 = node3) [print "duplicate node"
-           
+
            if node1 = node2 [set error-code  12 print "nodes 1 and 2 are the same" ]
            if node1 = node3 [set error-code  13 print "nodes 1 and 3 are the same"]
            if node2 = node3 [set error-code  23 print "nodes 2 and 3 are the same"]
            if node2 = node3 and node3 = node1 [set error-code  123  print "nodes 1, 2 and 3 are ALL the same"]
-           
-           
-            
+
+
+
             print "node 1 : " show [who] of node1
             print "node 2 : " show [who] of node2
             print "node 3 : " show [who] of node3
          ]
-         
-         
-         if (node1 = 0 or node2 = 0 or node3 = 0) [print "Node is 0 !" 
+
+
+         if (node1 = 0 or node2 = 0 or node3 = 0) [print "Node is 0 !"
             set error-code  2
             print "node 1 : " show [who] of node1
             print "node 2 : " show [who] of node2
             print "node 3 : " show [who] of node3
          ]
-         
-         if (node1 = nobody or node2 = nobody or node3 = nobody) [print "Node is nobody" 
+
+         if (node1 = nobody or node2 = nobody or node3 = nobody) [print "Node is nobody"
             set error-code  3
             print "node 1 : " show [who] of node1
             print "node 2 : " show [who] of node2
             print "node 3 : " show [who] of node3
          ]
-         
+
       if error-code != 0 [ ; print"for Triangle : " show PolyID_t
-        
+
         ;print "                    "
         ;print " Duplicates detected here now ..."
-        
-        ]  
-      
-         
-         
+
+        ]
+
+
+
       ]
-   
-     report error-code 
-   
+
+     report error-code
+
 end
 
 
 
 
 to make_on
-  
-  
-  
+
+
+
   create-Ons On_surface [
-    
+
     setxyz random-xcor random-ycor random-zcor
-    set fit -1 
-    set shape "dot" 
-    set color white 
-    set size 2    
+    set fit -1
+    set shape "dot"
+    set color white
+    set size 2
     ]
-  
-  
+
+
 end
 
 ;Major heart Transplant here .... Dec 20, 2013
-  
+
 ;DESCRIPTION: make_polygon creates an equilateral polygon of tcount sides. Code reworked from Polyhedra_2013 Code
 ;             Increased potential for going to a generic polygon model. For now it is hardwired to do triangles
 ;
@@ -426,74 +426,74 @@ end
 
 
 to make_polygon [Tcount]
- 
+
  ; Force polygons to stay on the plane
- ; not implimented yet 
-   
+ ; not implimented yet
+
    let x random-xcor
    let y random-ycor
    let z random-zcor
-   
-   let vnum 0 
+
+   let vnum 0
    set Tcount Tcount  ; polygon ID
    let active_polygon 0
    let active_mesh 0
-   
-   create-nodes sides [ 
-     
-     ;hide-turtle 
-     set shape "dot" 
-     set Poly_ID (list Tcount) 
+
+   create-nodes sides [
+
+     ;hide-turtle
+     set shape "dot"
+     set Poly_ID (list Tcount)
      set Node_ID -1
-     set closed -1  
-     setxyz x y z 
-     
-     set size 1  
-     set color (15 + (Tcount * 10)) 
+     set closed -1
+     setxyz x y z
+
+     set size 1
+     set color (15 + (Tcount * 10))
      set mass m0
      ; Note a better job could be done here to position polyghedra apriori to make a good polygon without having to use springs
-     ; for example we could have a floating virtual poly with no topology provided by a layout spring 
-     ; In theory the is a slim change initial forward motions on poly-vertices could converge to a point, potentially giving an error 
-     set heading random 360 
-     set pitch random 360 
-     set direction 1  
+     ; for example we could have a floating virtual poly with no topology provided by a layout spring
+     ; In theory the is a slim change initial forward motions on poly-vertices could converge to a point, potentially giving an error
+     set heading random 360
+     set pitch random 360
+     set direction 1
      ;forward edge_size
-     set size m0 
+     set size m0
      show-turtle
- 
+
      ]
-  
+
      perturb-poly nodes
 
      set active_polygon nodes with [member? Tcount Poly_ID]
-     
+
      seed-poly Tcount active_polygon ; picks a single node from the active-poly node set called the start_node
- 
-      
-             ; start the initial link from the seed            
-             
+
+
+             ; start the initial link from the seed
+
              if start_node != nobody [
               ; print " IN polygon constructor "
                ; Could be simplified by setting selection of polygon agents to new agents such as active-agent active nodes etc.
                while [any? active_polygon with [closed != 1]] [
-                 
+
                  perturb-poly active_polygon
-               ask start_node [       
+               ask start_node [
                    ;initialize the masses
                    if Node_ID = 0 [set mass m0 set size m0]
                    if Node_ID = 1 [set mass m1 set size m1]
                    if Node_ID = 2 [set mass m2 set size m2]
-                   
-                   ;see if you have come to the end of the chain of vertices of the polygon
-                   ifelse (Node_ID < sides - 1) 
 
-                                  [set closest-friend min-one-of other active_polygon with [ closed = -1 and Node_ID != 0] [distancexyz-nowrap xcor ycor zcor] ]  
-                                               
+                   ;see if you have come to the end of the chain of vertices of the polygon
+                   ifelse (Node_ID < sides - 1)
+
+                                  [set closest-friend min-one-of other active_polygon with [ closed = -1 and Node_ID != 0] [distancexyz-nowrap xcor ycor zcor] ]
+
                                   [
                                     ;print "Closing off now .."
                                    set closest-friend one-of other active_polygon with [Node_ID = 0]
                                    ]
-                   
+
                    if (closest-friend != nobody) [
                      ;print "closest firend" show closest-friend
                        create-edge-to closest-friend [
@@ -504,67 +504,67 @@ to make_polygon [Tcount]
                                                    set fromNode end1
                                                    set toNode end2
                                                    set next_node end2
-                                                   
-                                                  
-                                                   
-                                                   
+
+
+
+
                                                    set vnum vnum + 1
-                                                   
+
                                                    ; Do not rename the Node_ID of the initial node but get it closed
                                                    if ([Node_ID] of end2 != 0) [ask end2 [set Node_ID vnum ]]
-                                                   ;reset the start node to the local polygon colour 
+                                                   ;reset the start node to the local polygon colour
                                                    if ([Node_ID] of end2 = 0) [let local_colour [color] of end1 ask end2 [set color local_colour]]
-                                             
-                                                   ;edge colour  
-                                                   set color green        
-                                                  ]                              
-                   
+
+                                                   ;edge colour
+                                                   set color green
+                                                  ]
+
                    ]
-                   
-                   
-                   
-                   
-                   
+
+
+
+
+
                    ]
- 
+
                set start_node next_node
-               
+
                ask active_polygon [
                    ; classify the local topology closed = -1 no topology, closed = 0 one link,  closed = 1 two links
                    if (count my-out-links = 0 and count my-in-links = 0) [set closed -1]
-                   if (count my-out-links = 1 and count my-in-links = 0) [set closed 0] 
-                   if (count my-out-links = 0 and count my-in-links = 1) [set closed 0] 
-                   if (count my-out-links = 1 and count my-in-links = 1) [set closed 1] 
+                   if (count my-out-links = 1 and count my-in-links = 0) [set closed 0]
+                   if (count my-out-links = 0 and count my-in-links = 1) [set closed 0]
+                   if (count my-out-links = 1 and count my-in-links = 1) [set closed 1]
                ]
-                   
-             
-                   
-                   
-               
-                  
+
+
+
+
+
+
              ;perturb-poly active_polygon
-     
-   ] ;in the active polygon 
-   ] ; 
 
-  
+   ] ;in the active polygon
+   ] ;
 
 
-   
+
+
+
 ;;;;;; May not need create-triangle if make-poly works  ......
 ;
 ;
 ;
-; Leave for another day ..... important to make this more dynamic for all polygon cases not just triangles        
-  
-  
-  ;create the triangle (or polygon) needs work to dynamically load the poly vertex array 
-  create-triangles 1 
+; Leave for another day ..... important to make this more dynamic for all polygon cases not just triangles
+
+
+  ;create the triangle (or polygon) needs work to dynamically load the poly vertex array
+  create-triangles 1
   [
-    hide-turtle  ; Triangles are a concept only the associated agents and elements need to be visualized 
+    hide-turtle  ; Triangles are a concept only the associated agents and elements need to be visualized
     set PolyID_t Tcount
-   
-      
+
+
     ; Need string substitution and variable name construction
     set node1 one-of nodes with [member? Tcount Poly_ID and Node_ID = 0]
     set node2 one-of nodes with [member? Tcount Poly_ID and Node_ID = 1]
@@ -574,72 +574,72 @@ to make_polygon [Tcount]
     ;could potentially continue on like this in a loop for "N" sided polygons
     ;set node4 one-of nodes with [member? Tcount Poly_ID and Node_ID = 3]
     ;set nodeN one-of nodes with [member? Tcount Poly_ID and Node_ID = N-1]
-    
-    set shared_edges 0    ; edges are shared when a polygon is joined 
-   
-    
+
+    set shared_edges 0    ; edges are shared when a polygon is joined
+
+
     ; Reset orientation for all nodes
-    ask node1 [set heading 0 set pitch 0] 
+    ask node1 [set heading 0 set pitch 0]
     ask node2 [set heading 0 set pitch 0]
     ask node3 [set heading 0 set pitch 0]
     ]
- 
+
   ; Assumes polygon is a triangle, sides hardwired to be 3 in setup during initialization
   ; get the center of the triangle  (later adapt the matrix to get centre of polyhedra )
   ; Don't need an array to do this. Could use agent property operators mean, mid etc.
-  
-  
+
+
   let R matrix:make-constant 3 ( 3 + 3 )  -99999
-  
+
   ask [node1] of (one-of triangles with [PolyID_t = Tcount])
-    [ 
-      matrix:set-row R 0 ( list tcount 0 xcor ycor zcor mass )       
+    [
+      matrix:set-row R 0 ( list tcount 0 xcor ycor zcor mass )
     ]
   ask [node2] of (one-of triangles with [PolyID_t = Tcount])
-    [ 
-      matrix:set-row R 1 ( list tcount 1 xcor ycor zcor mass )       
+    [
+      matrix:set-row R 1 ( list tcount 1 xcor ycor zcor mass )
     ]
   ask [node3] of (one-of triangles with [PolyID_t = Tcount])
-    [ 
-      matrix:set-row R 2 ( list tcount 2 xcor ycor zcor mass )       
+    [
+      matrix:set-row R 2 ( list tcount 2 xcor ycor zcor mass )
     ]
-  
+
 
   getBarycenter R Tcount
-  
-  
-  
+
+
+
 end
 
 
 
 to seed-poly [Tcount input_poly]       ; start the initial seed node = 0 for the polyhedra
-  
+
        set start_node one-of input_poly with [member? Tcount Poly_ID and closed = -1 ]
        ask start_node [set Node_ID 0 set closed 0 set color white ]
-end  
- 
-to perturb-poly [input_poly]      ; Make nodes dynamic by making links elastic 
-  
-  
-  
-  ; WORKING HERE LUNCH TIME JAn 29
-  
-  ; What is happening when nodes and edges are not the same atom set ?
-  
-  
-  
-       
-      repeat 10 [layout-spring input_poly edges (tension * 2) edge_size (repulsion * 2)] 
+end
 
- 
+to perturb-poly [input_poly]      ; Make nodes dynamic by making links elastic
+
+
+
+  ; WORKING HERE LUNCH TIME JAn 29
+
+  ; What is happening when nodes and edges are not the same atom set ?
+
+
+
+
+      repeat 10 [layout-spring input_poly edges (tension * 2) edge_size (repulsion * 2)]
+
+
     ; Make polygon nodes dynamic by making links elastic
     ; layout-spring nodes edges (tension * .5) edge_size / 5 (repulsion * .3)
 
-end 
- 
- 
- 
+end
+
+
+
 
 
 
@@ -655,22 +655,22 @@ end
 ;
 ;CALLS: contains
 
-to perturb  
+to perturb
 
-  let free-triangles nobody ; unmeshed triangles 
-  let free-nodes nobody ; 
+  let free-triangles nobody ; unmeshed triangles
+  let free-nodes nobody ;
   let free-edges nobody ;
   let closest-node nobody ; The nearest On surface data point
   let active-data nobody ; The active data attractor
   let closest-data nobody ; the nearest data point of the active data to the mesh nodes
-  
+
   let active-mesh nobody ; the non-closest meshed nodes
-  let outer_ring 0 ; Outside free edge set of mesh  
+  let outer_ring 0 ; Outside free edge set of mesh
   let outer_nodes 0 ; nodes defining the outer ring
   let inner_nodes 0 ; nodes inside the ring
   let inner_edges 0; edges shared in the mesh
 
- 
+
 
   set free-triangles triangles with [shared_edges = 0]
   if any? free-triangles [
@@ -679,126 +679,126 @@ to perturb
     ]
 
   repeat 100 [layout-spring nodes edges tension * 2 edge_size repulsion * 2 ]
- 
-   
-   
-   
-   ;;;; WORKING HERE MARCH 3, 2014 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-   
-   
-   
-   
 
-   if (any? Ons with [fit != 1] and all? triangles [shared_edges >= 0] ) [ 
-   
-   
-   
-   
-    ; 1. Get the mesh elements to sense where the data is.    
+
+
+
+   ;;;; WORKING HERE MARCH 3, 2014 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+
+
+
+
+   if (any? Ons with [fit != 1] and all? triangles [shared_edges >= 0] ) [
+
+
+
+
+    ; 1. Get the mesh elements to sense where the data is.
           ;;;; WORKING HERE !!! Dec 18, 2013
           ;Ask the meshed nodes to identify the closest to data lead agents
-          ;Make a seperate distance to data map for each data point. 
-          
-          
+          ;Make a seperate distance to data map for each data point.
+
+
           ; Make the mesh move in a way that minimizes the total distance to data
           ; Randomly perturb the nodes while keeping the mesh intact
           ; If a local distance from node to data is reduced accept that direction
           ; if internode distance is increased too much then try to close the gap between neighbours
           ; maybe mesh can handle this with spring links
-          
-          
-          
-          ;Find the closest mesh node to each data point 
+
+
+
+          ;Find the closest mesh node to each data point
           ; Do this without a list !!!
-          
-          ; Do it dynamicaly 
-          
-          ; No arrays 
-          ; Thats what agents are supposed to be good at 
-          
-           set active-data Ons with [fit != 1]  
+
+          ; Do it dynamicaly
+
+          ; No arrays
+          ; Thats what agents are supposed to be good at
+
+           set active-data Ons with [fit != 1]
            set active-mesh nodes with [direction != 0]
            if (mesh_count = Num_Poly)  [ask nodes [set direction 1 set active-mesh nodes]]
-           
+
            ask active-mesh [set heading random 360 set pitch random 360 forward .01 * (random -1 + random 1)]
            ;layout-spring active-mesh edges (tension * .5) edge_size / 5 (repulsion * .3)
-           
-           
-           
-           
-           
+
+
+
+
+
            ask active-data [
-             
-              
-               
-               set closest-node min-one-of nodes with [direction != 0] 
-                           [distancexyz-nowrap xcor ycor zcor] 
-               set closest-data min-one-of active-data  
+
+
+
+               set closest-node min-one-of nodes with [direction != 0]
+                           [distancexyz-nowrap xcor ycor zcor]
+               set closest-data min-one-of active-data
                            [distancexyz-nowrap [xcor] of closest-node [ycor] of closest-node [zcor] of closest-node]
                if (closest-node != nobody and length [Poly_ID] of closest-node > 1 and closest-data != nobody) [
-          
+
                                 ask active-mesh [
-                                         face closest-data 
+                                         face closest-data
                                          show-turtle
-                                         set color red    
+                                         set color red
                                          set proximity distancexyz-nowrap [xcor] of closest-data [ycor] of closest-data [zcor] of closest-data
-                                          
+
                                          ifelse (proximity > .5)
                                               [
                                              forward .25
                                                ]
-                                              [  
-                                                set direction 0 ask closest-data [set color blue set fit 1 set proximity max-pxcor stop] 
-                                              ] 
-                       
+                                              [
+                                                set direction 0 ask closest-data [set color blue set fit 1 set proximity max-pxcor stop]
+                                              ]
+
                                ]
                        ]
                set-current-plot "Dist2Data"
                set-current-plot-pen "proximity"
-               plot proximity 
+               plot proximity
    ]
-          
 
-          
+
+
          ; Some distqance function examples :
           ;ask Data_links [set local_heading link-heading set local_pitch link-pitch]
           ;ask nodes [set heading local_heading set pitch local_pitch]
           ;ask turtles [ show max-one-of turtles [distance myself] ]
           ;ask searchers [set pdist2data distance patch-here]
-          ;;find the data point closest to this patch      
+          ;;find the data point closest to this patch
           ;let nearest min-one-of data [distance myself]
-          ;let closest min-one-of interpretations [distance myself] 
-          ;set pdist2data distance closest 
+          ;let closest min-one-of interpretations [distance myself]
+          ;set pdist2data distance closest
 
-        
+
     ; 2. Create a set of links to data from centres
-    ; 3. Get that vector and normalize it 
+    ; 3. Get that vector and normalize it
     ; 4. Convert to a heading and pitch
     ; 5. Keep a randomizing component
     ; 6. Move towards the data
     ; 7. Check when centres are moving away from the data
     ; 8. Adjust if moving away
-     
-     
-     
- ]  ; End of move to DATA perturbation  
-     
-    
- 
-  set free-triangles triangles with [shared_edges = 0]  
-    
-  ifelse (count free-triangles > 0) 
-          [move free-triangles] 
+
+
+
+ ]  ; End of move to DATA perturbation
+
+
+
+  set free-triangles triangles with [shared_edges = 0]
+
+  ifelse (count free-triangles > 0)
+          [move free-triangles]
           [move triangles ]
-            
- 
- 
- 
-  
+
+
+
+
+
 end
 
 
-;DESCRIPTION: move projects the path of a nodeset in the direction of its polygon normal direction 
+;DESCRIPTION: move projects the path of a nodeset in the direction of its polygon normal direction
 ;
 ;Date : Feburary 19, 2014
 ;
@@ -806,7 +806,7 @@ end
 ;
 ;RETURN VALUE: none
 ;
-;PARAMETERS: 
+;PARAMETERS:
 ;
 ;CALLED BY: perturb
 ;
@@ -816,30 +816,30 @@ end
 
 
 to move [target_triangles]
-  
+
   let active-centre nobody ; the centre of an active triangle one being worked on
-  let pad .1     ; The proximity to wall criteria      
+  let pad .1     ; The proximity to wall criteria
   let Alpha 0    ; direction cosines X
   let Beta 0     ; direction cosines Y
   let Gamma 0    ; direction cosines Y
-  let Bee nobody  ; Identifier for active triangle and related objects 
-  
-  ask target_triangles [  
-         
+  let Bee nobody  ; Identifier for active triangle and related objects
+
+  ask target_triangles [
+
          set Bee self
-         
- 
+
+
          ; Move ridgidly in the NORMAL direction the target polygons acording to their local Normal
 
-         let active-nodes nobody ; individual triangle vertices to be moved 
+         let active-nodes nobody ; individual triangle vertices to be moved
          ifelse ( mesh_count = Num_Poly ) [set active-nodes nodes]
                                           [set active-nodes nodes with [item 0 Poly_ID = [PolyID_t] of Bee]]
-           
-           
+
+
          ;perturb-poly active-nodes
-         
+
          ask active-nodes [
-           
+
          ;if any node in the group is away from the wall keep it moving
          ; Note Heading = Trend (0 north 90 east 180 south 270 west 360 north) and pitch ~= Plunge (0 horizontal, 90 up, -90 down)
 
@@ -850,27 +850,27 @@ to move [target_triangles]
                     if (Beta >= 0) [ set heading 0  ]
                     if (Beta < 0)  [ set heading 180 ]
                      ]
-                     [     
-                    set heading (atan Alpha Beta ) 
+                     [
+                    set heading (atan Alpha Beta )
                     ;set heading 180
-                     ] 
+                     ]
 
                     set pitch (90 - acos(Gamma))
-              
-              forward direction * .01 
 
-            ; Proximity detector for the active triangle (a group agent set) 
-            if ((abs(max-pxcor - xcor) < pad) or 
+              forward direction * .01
+
+            ; Proximity detector for the active triangle (a group agent set)
+            if ((abs(max-pxcor - xcor) < pad) or
                (abs(min-pxcor - xcor) < pad) or
                (abs(max-pycor - ycor) < pad) or
                (abs(min-pycor - ycor) < pad) or
                (abs(max-pzcor - zcor) < pad) or
                (abs(min-pzcor - zcor) < pad))
-               
-               [  
-                 
-                  ;print "on the wall " 
-                 
+
+               [
+
+                  ;print "on the wall "
+
                  ;make sure the node is not traped in the pad buffer
                  ;need to check all 6 sides and move the node out of the buffer
                  if (abs(max-pxcor - xcor) < pad) [set xcor (xcor - pad)] ;print "hit wall 100"]
@@ -879,21 +879,21 @@ to move [target_triangles]
                  if (abs(min-pycor - ycor) < pad) [set ycor (ycor + pad)] ;print "hit wall 0-10"]
                  if (abs(max-pzcor - zcor) < pad) [set zcor (zcor - pad)] ;print "hit wall 001"]
                  if (abs(min-pzcor - zcor) < pad) [set zcor (zcor + pad)] ;print "hit wall 00-1"]
-                   
-                
+
+
                 ;print "Pushed off the wall !"
-                 
-                 
-            
+
+
+
                  set direction direction * -1
-                 
+
                ]
-              
-         ]    
-    ]       
-  
-  
-  
+
+         ]
+    ]
+
+
+
 end
 
 
@@ -907,7 +907,7 @@ end
 ;
 ;RETURN VALUE: none
 ;
-;PARAMETERS: none 
+;PARAMETERS: none
 ;
 ;CALLED BY: go
 ;
@@ -916,93 +916,93 @@ end
 to update
   ;print "Updating now..."
   let tcount 0
-  
+
   let update-nodes nobody
-  let local-nodes nodes with [direction = 0] ;means they are close to data 
- 
+  let local-nodes nodes with [direction = 0] ;means they are close to data
+
   let rx 0
   let ry 0
   let rz 0
-  
-  
+
+
   ; Get the regional barycentre
-  
-  set rx item 0 RegBary_XYZ 
-  set ry item 1 RegBary_XYZ 
-  set rz item 2 RegBary_XYZ 
-  
+
+  set rx item 0 RegBary_XYZ
+  set ry item 1 RegBary_XYZ
+  set rz item 2 RegBary_XYZ
+
   ;show rx show ry show rz
   ask centres with [Norm_ID = 0 and color = yellow] [set size .5 set color red]
-  set regional-centre min-one-of centres with [Norm_ID = 0] [distancexyz-nowrap rx ry rz] 
-  
-  
+  set regional-centre min-one-of centres with [Norm_ID = 0] [distancexyz-nowrap rx ry rz]
+
+
   ask regional-centre [set color yellow set size 1]
-  
-  let R matrix:make-constant 3 ( 3 + 3 )  -99999      
-  
- 
- 
- 
-   
- 
- 
-  
-  while [tcount < Num_Poly ] 
-    [ 
-  
+
+  let R matrix:make-constant 3 ( 3 + 3 )  -99999
+
+
+
+
+
+
+
+
+  while [tcount < Num_Poly ]
+    [
+
   ;;;;   WORKING HERE JAN 10, 2014 ... ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-  
-  ;;; BUG with loading triangle node1, node2 ,....  
+
+  ;;; BUG with loading triangle node1, node2 ,....
   ;
   ;
-  ;   Notes:   FIXED !!!!! HEY !!! 
+  ;   Notes:   FIXED !!!!! HEY !!!
   ;
   ;           1. For every killed triangle we need to make a new FREE triangle identical to the last Killed one
   ;           2. Triangles rarely get killed but in FUSE the nodes thet node1-3 point to can easily get killed during a meshing
-  ;           3. If this happens you have to make sure the original triangle node1-3 properties are updated with the new nodes 
+  ;           3. If this happens you have to make sure the original triangle node1-3 properties are updated with the new nodes
   ;           4. All new node1-3 operations have to be able to handle the replacments.
-    
-     
-     
-     
-   
-     
-     
+
+
+
+
+
+
+
       ask triangles [ let tnodes (list node1 node2 node3) if length tnodes < 3 [ print "Missing nodes in triangle:" show PolyID_t show tnodes]]
-     
-     
-     
-     
+
+
+
+
   ;print " In barycentre calc  .... "
-  
-  
-  
+
+
+
   ; reset the nodes to point to a set from their internal triangle
- 
-  ; Check and fix duplicate node pointers in triangles if they exist 
-   
+
+  ; Check and fix duplicate node pointers in triangles if they exist
+
  ; print "--------------    TRIANGLE NODE DUPLICATION  CHECK ---------------"
-  ask triangles with [PolyID_t = tcount] [ 
+  ask triangles with [PolyID_t = tcount] [
               let tnow self
               let fix nobody
               let ncheck tnode-check
-             
-              
+
+
               if ncheck = 12 [ ;case where node 3 is known, cycle clockwise to pick up node identities through the ends of the common edges
                                print "Trying fix duplicate case - 12 "
                                ask node3 [set fix [end2] of one-of my-out-edges with [PolyID = tcount] ]
                                set node1 fix
                                ask node1 [set fix [end2] of one-of my-out-edges with [PolyID = tcount] ]
                                set node2 fix
-                
+
               ]
               if ncheck = 13 [  ;case where node 2 is known, cycle clockwise to pick up node identities through the ends of the common edges
                                print "Trying fix duplicate case - 13 "
                                ask node2 [set fix [end2] of one-of my-out-edges with [PolyID = tcount] ]
                                set node3 fix
                                ask node3 [set fix [end2] of one-of my-out-edges with [PolyID = tcount] ]
-                               set node1 fix 
-                
+                               set node1 fix
+
               ]
               if ncheck = 23 [ ;case where node 1 is known, cycle clockwise to pick up node identities through the ends of the common edges
                                print "Trying fix duplicate case - 23 "
@@ -1010,79 +1010,79 @@ to update
                                set node2 fix
                                ask node2 [set fix [end2] of one-of my-out-edges with [PolyID = tcount] ]
                                set node3 fix
-                
+
               ]
               if ncheck = 123 [ ;case where all are the same, just pick the first one, cycle clockwise to pick up node identities through the ends of the common edges
-                                ; works out to the same actually as case 23 
+                                ; works out to the same actually as case 23
                                print "Trying fix triplicate case - 123 "
                                ask node1 [set fix [end2] of one-of my-out-edges with [PolyID = tcount] ]
                                set node2 fix
                                ask node2 [set fix [end2] of one-of my-out-edges with [PolyID = tcount] ]
                                set node3 fix
-                
-              ]
-      
-              
-              
-              
-              ]
-            
-            
-            
-            
-           
-   
-   
-   
-   
-   
-      
-      
-           
-           
-      ask triangles with [PolyID_t = tcount] [     
-         
 
-        
+              ]
+
+
+
+
+              ]
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+      ask triangles with [PolyID_t = tcount] [
+
+
+
           ask node1 [
             ; Update mass from the user dynamicaly
             set mass m0 set size m0
             ; Fix the Matrix loader to be dynamic
-            matrix:set-row R 0 ( list tcount 0 xcor ycor zcor mass ) 
-            ] 
-          
+            matrix:set-row R 0 ( list tcount 0 xcor ycor zcor mass )
+            ]
+
            ask node2 [
             ; Update mass from the user dynamicaly
             set mass m1 set size m1
             ; Fix the Matrix loader to be dynamic
-            matrix:set-row R 1 ( list tcount 1 xcor ycor zcor mass ) 
-            ] 
-           
+            matrix:set-row R 1 ( list tcount 1 xcor ycor zcor mass )
+            ]
+
           ask node3 [
             ; Update mass from the user dynamicaly
             set mass m2 set size m2
             ; Fix the Matrix loader to be dynamic
-            matrix:set-row R 2 ( list tcount 2 xcor ycor zcor mass )   
-            ]      
-            
-      ] 
-         
+            matrix:set-row R 2 ( list tcount 2 xcor ycor zcor mass )
+            ]
+
+      ]
+
         getBarycenter R tcount
-       
-        set tcount tcount + 1 
-  
-    ; Data mine the local neighbourhood and move update nodes to a plane   
-    set update-nodes nodes with [member? tcount Poly_ID]   
-   
-    
-    
-    ] 
-      
+
+        set tcount tcount + 1
+
+    ; Data mine the local neighbourhood and move update nodes to a plane
+    set update-nodes nodes with [member? tcount Poly_ID]
+
+
+
+    ]
+
     ;print "Bary Calc done"
-    
+
     ; Update the topology index
     let checker check-topology
-      
+
 end
 
 
@@ -1092,7 +1092,7 @@ end
 ;
 ;Date : December 18, 2013 (updated from previous codes)
 ;
-;Author: Eric de Kemp 
+;Author: Eric de Kemp
 ;
 ;RETURN VALUE: RegBary_XYZ the Regional Barycentre (global) as list of coordinates 0=X,1=Y,2=Z on the list
 ;
@@ -1105,147 +1105,147 @@ end
 ;CALLS: cross
 
 to getBarycenter [R tcount]
-  
+
   let Xmass 0
   let Ymass 0
   let Zmass 0
-  
+
   let nx 0
   let ny 0
-  let nz 0 
-  
+  let nz 0
+
   set RegBary_XYZ [0 0 0]
-  
-  
+
+
   let i 0
-  while [i < 3] 
+  while [i < 3]
     [
       let Ximass ( matrix:get R i 2 * matrix:get R i 5 )
       let Yimass ( matrix:get R i 3 * matrix:get R i 5 )
       let Zimass ( matrix:get R i 4 * matrix:get R i 5 )
-      
+
       set Xmass ( Xmass + Ximass )
       set Ymass ( Ymass + Yimass )
       set Zmass ( Zmass + Zimass )
-      
+
       set i ( i + 1 )
     ]
-  
+
   let Sum_mass sum matrix:get-column R 5
-  
-  ifelse (any? centres with [Centre_ID = tcount]) 
+
+  ifelse (any? centres with [Centre_ID = tcount])
   [
     ask centres with [Centre_ID = tcount]
-    [ 
-    
-    set xcor ( Xmass / Sum_mass ) 
+    [
+
+    set xcor ( Xmass / Sum_mass )
     set ycor ( Ymass / Sum_mass )
-    set zcor ( Zmass / Sum_mass )  
-    
-    set nx xcor  
-    set ny ycor  
-    set nz zcor  
-    
+    set zcor ( Zmass / Sum_mass )
+
+    set nx xcor
+    set ny ycor
+    set nz zcor
+
     ]
   ]
-  
+
   [
-    
-    create-centres 1 
+
+    create-centres 1
     [
-      
-      set Centre_ID tcount 
+
+      set Centre_ID tcount
       set Norm_ID 0
       set Norm_X 0
       set Norm_Y 0
       set Norm_Z 0
-      
-      set xcor ( Xmass / Sum_mass ) 
+
+      set xcor ( Xmass / Sum_mass )
       set ycor ( Ymass / Sum_mass )
-      set zcor ( Zmass / Sum_mass )                  
-      set shape "dot" 
+      set zcor ( Zmass / Sum_mass )
+      set shape "dot"
       set size .5
-      set color red 
+      set color red
     ]
-  
-  create-centres 1 
-  [   
-    
-    set Centre_ID tcount 
+
+  create-centres 1
+  [
+
+    set Centre_ID tcount
     set Norm_ID 1
     set Norm_X 0
     set Norm_Y 0
     set Norm_Z 0
-    
+
     ;get a cross-product vector or normal from equation of a plane
-    ask centres with [Centre_ID = tcount and Norm_ID = 0] 
+    ask centres with [Centre_ID = tcount and Norm_ID = 0]
       [
-        set nx xcor 
-        set ny ycor 
+        set nx xcor
+        set ny ycor
         set nz zcor
-      ] 
-    
-    set xcor nx 
-    set ycor ny 
-    set zcor nz       
-    set shape "dot" 
+      ]
+
+    set xcor nx
+    set ycor ny
+    set zcor nz
+    set shape "dot"
     set size .25
     set color red
-  ]  
-    
+  ]
+
   ]
 
   ; Get the Normal
-  
-  let l1X ( nx - matrix:get R 0 2 )          
+
+  let l1X ( nx - matrix:get R 0 2 )
   let l1Y ( ny - matrix:get R 0 3 )
   let l1Z ( nz - matrix:get R 0 4 )
-  let l2X ( nx - matrix:get R 1 2 )          
+  let l2X ( nx - matrix:get R 1 2 )
   let l2Y ( ny - matrix:get R 1 3 )
   let l2Z ( nz - matrix:get R 1 4 )
-  
-  
+
+
   let Norm_Xtemp -1
   let Norm_Ytemp -1
   let Norm_Ztemp -1
-  
-  
-  ask centres with [Centre_ID = tcount and Norm_ID = 1] 
-  
-      ; Note that Normal properties Norm_X,Norm_Y, Norm_Z now stored on Norm_ID = 1 and Norm_ID = 0 
-  
-    [ let active-centre self    
-      let N cross active-centre l1X l1Y l1Z l2X l2Y l2Z 0 
-      
+
+
+  ask centres with [Centre_ID = tcount and Norm_ID = 1]
+
+      ; Note that Normal properties Norm_X,Norm_Y, Norm_Z now stored on Norm_ID = 1 and Norm_ID = 0
+
+    [ let active-centre self
+      let N cross active-centre l1X l1Y l1Z l2X l2Y l2Z 0
+
       set xcor xcor + ( item 0 N  * ( edge_size / 5))
       set ycor ycor + ( item 1 N  * ( edge_size / 5))
       set zcor zcor + ( item 2 N  * ( edge_size / 5)) ; Original code had /52 ouch !
-      
-      
+
+
       set Norm_Xtemp item 0 N
       set Norm_Ytemp item 1 N
       set Norm_Ztemp item 2 N
       ; Make an undirected link called normal
-      create-normal-with one-of centres with [Centre_ID = tcount and Norm_ID = 0] 
-      [ 
-        set color red 
-      ] 
-      
+      create-normal-with one-of centres with [Centre_ID = tcount and Norm_ID = 0]
+      [
+        set color red
+      ]
+
     ]
-    
+
   ; ensure full Normal coding of the base and top of the normal
   ask centres with [Centre_ID = tcount ]
     [
-        set Norm_X Norm_Xtemp  
+        set Norm_X Norm_Xtemp
         set Norm_Y Norm_Ytemp
-        set Norm_Z Norm_Ztemp   
+        set Norm_Z Norm_Ztemp
         ]
-  
-  ; Calculate the Regional Barycentre of the whole data set 
+
+  ; Calculate the Regional Barycentre of the whole data set
   set RegBary_XYZ replace-item 0 RegBary_XYZ mean [Xcor] of Nodes
-  set RegBary_XYZ replace-item 1 RegBary_XYZ mean [Ycor] of Nodes  
+  set RegBary_XYZ replace-item 1 RegBary_XYZ mean [Ycor] of Nodes
   set RegBary_XYZ replace-item 2 RegBary_XYZ mean [Zcor] of Nodes
-    
+
     ;show RegBary_XYZ
 
 end
@@ -1253,7 +1253,7 @@ end
 
 ;DESCRIPTION: This function produces the normal to the center of a triangle
 ;
-;RETURN VALUE: 
+;RETURN VALUE:
 ;
 ;PARAMETERS: V1X V1Y V1Z V2X V2Y V2Z - The  coordinates of 2 vertices in the plane
 ;            normalized - a boolean value describing the normalization status
@@ -1263,53 +1263,53 @@ end
 ;CALLS: none
 
 to-report cross [Cent V1X V1Y V1Z V2X V2Y V2Z normalized]
-  
+
   ; Note it is dangerous to use an agent property variable explicily in a function call like Norm_X herein.
   ; This was converted to an agent based call where the input is an agent here called Cent
-  
-let CN_X -99999                 
-let CN_Y -99999   
-let CN_Z -99999   
+
+let CN_X -99999
+let CN_Y -99999
+let CN_Z -99999
 let CN []   ; a null list for populating with component Normals
-    
+
   ask Cent [
-    ifelse ( normalized  = 0 ) 
+    ifelse ( normalized  = 0 )
   [
-    
-    set CN_X ((V1Y * V2Z) - (V1Z * V2Y))                  
+
+    set CN_X ((V1Y * V2Z) - (V1Z * V2Y))
     set CN_Y ((V1Z * V2X) - (V1X * V2Z))
-    set CN_Z ((V1X * V2Y) - (V1Y * V2X)) 
-    
+    set CN_Z ((V1X * V2Y) - (V1Y * V2X))
+
     let Norm (sqrt (CN_X ^ 2 + CN_Y ^ 2 + CN_Z ^ 2))
     ;avoid a division by zero
     if (Norm = 0) [set Norm 0.000001]
-    
-    set CN_X (CN_X / Norm) 
-    set CN_Y (CN_Y / Norm) 
-    set CN_Z (CN_Z / Norm) 
-    
-    
+
+    set CN_X (CN_X / Norm)
+    set CN_Y (CN_Y / Norm)
+    set CN_Z (CN_Z / Norm)
+
+
   ]
-  
-  [ 
+
+  [
     ; This is not used currently because all data is assumed to be un-normalized
-    set CN_X ((V1Y * V2Z) - (V1Z * V2Y))                  
+    set CN_X ((V1Y * V2Z) - (V1Z * V2Y))
     set CN_Y ((V1Z * V2X) - (V1X * V2Z))
-    set CN_Z ((V1X * V2Y) - (V1Y * V2X))   
+    set CN_Z ((V1X * V2Y) - (V1Y * V2X))
   ]
-  ]   
-   
-  ; Apparently we need to load a list of variables using lput  
+  ]
+
+  ; Apparently we need to load a list of variables using lput
   set CN lput CN_X CN
   set CN lput CN_Y CN
   set CN lput CN_Z CN
-  
+
  report CN
-  
+
 end
 
-;DESCRIPTION: This function updates a targeted neighbourhood node-set to be co-planar with a single 
-;             specified local Normal such as the pre-calculated regional normal   
+;DESCRIPTION: This function updates a targeted neighbourhood node-set to be co-planar with a single
+;             specified local Normal such as the pre-calculated regional normal
 ;
 ;AUTHOR:   Eric de Kemp
 ;
@@ -1333,34 +1333,34 @@ to planar [local target]
   let delta_x 0
   let delta_y 0
   let delta_z 0
-  
+
   ;Get the geometry (coordinates and normal) of the local agent
-  
+
 ask local [
   print " Regional Centre" show local show Norm_X show Norm_Y show Norm_Z
             set lx xcor set ly ycor set lz zcor
             set lAlpha Norm_X set lBeta Norm_Y set lGamma Norm_Z
-     
-     ;Calculate the target agents projection onto the local plane 
+
+     ;Calculate the target agents projection onto the local plane
      ask target [
-       
-       
-      
+
+
+
       ; Given the local normal and coordinates on the plane derive the impact point of the projected agent
       ; q_proj = q - dot(q - p, n) * n
       ; q = x,y,z off plane point to be projected
       ; p = a,b,c on plane point
       ; n = d,e,f unit normal to the plane
       ;
-      ; Reference stackoverflow.com/questions/8942950 
+      ; Reference stackoverflow.com/questions/8942950
 
       ;get coordinates of the target agent
-  
-               let tx xcor 
-               let ty ycor 
+
+               let tx xcor
+               let ty ycor
                let tz zcor
                let px (tx - lx)
-               let py (ty - ly) 
+               let py (ty - ly)
                let pz (tz - lz)
 
                let proj_x tx - ((dotProd px py pz lAlpha lBeta lGamma) * lAlpha)
@@ -1368,10 +1368,10 @@ ask local [
                let proj_z tz - ((dotProd px py pz lAlpha lBeta lGamma) * lGamma)
 
                ; Do a small step forward along the projected path
-               set delta_x (proj_x - xcor) / 10 
+               set delta_x (proj_x - xcor) / 10
                set delta_y (proj_y - ycor) / 10
                set delta_z (proj_z - zcor) / 10
- 
+
 
                ;set xcor proj_x set ycor proj_y set zcor proj_z
                set xcor xcor + delta_x
@@ -1380,15 +1380,15 @@ ask local [
 
 
 print "Projecting ..."
-               ]  
-      
+               ]
+
     ]
-   
-  
- 
 
 
- 
+
+
+
+
 
 end
 
@@ -1408,10 +1408,10 @@ end
 
 ; Could use a major cleanup .... needs to be simplified
 to selectNeighbour
-  
-  
+
+
   let closest_centre -1
-  let closest -1 
+  let closest -1
   let shared1 -99 ; define better ?
   let shared2 -99 ; define better ?
   let seed_found 0
@@ -1419,183 +1419,183 @@ to selectNeighbour
   let active-neighbours nobody ; a free triangle node-set with a neighbour edge ready to be snapped to the mesh
   let ring nobody ; outer mesh edge set
   let ring_nodes nobody ; outer mesh node set
-  let rcx 0 
-  let rcy 0  
+  let rcx 0
+  let rcy 0
   let rcz 0
   let peton nobody
- 
-  
-   ; Neigbour vertex-to-vertex mesh connector     
+
+
+   ; Neigbour vertex-to-vertex mesh connector
    ; !! This actually makes the meshing work but screws up the free triangle migration !!
 
    ;layout-spring nodes edges .5 edge_size / 5 .3
-  
+
   ; Happend when meshing has begun and No Smoothing has been called seed is lost
   ; Occurs just after 4 edges are all identified as a seed edge seed is violet and not reset.
   ; Supposed to have only 1 seed edge at a time.
-  ; Somehow the coding of the sharedEdge property for edges gets screwed up  
-  
-  
+  ; Somehow the coding of the sharedEdge property for edges gets screwed up
+
+
   ; Major bug fix 1..
   ; If a seed is not found we help out with a forced loop
-  
-  
- set rcx [xcor] of regional-centre 
+
+
+ set rcx [xcor] of regional-centre
  set rcy [ycor] of regional-centre
  set rcz [zcor] of regional-centre
-  
-   
- while [seed_found = 0] 
+
+
+ while [seed_found = 0]
   [
-  ; If no meshing has occurred 
-  if mesh_count = 0  
+  ; If no meshing has occurred
+  if mesh_count = 0
     [
-      
+
       set seed one-of edges with [sharedEdge = -1 and sharedPoly = -1 and PolyID = [Centre_ID] of regional-centre]
       set origin seed
-      ask seed [set color red] 
+      ask seed [set color red]
       set seed_found 1
-     
+
     ]
-  if (mesh_count > 0 and count triangles with [shared_edges = 0] > 0 and mesh_count < Num_Poly) 
+  if (mesh_count > 0 and count triangles with [shared_edges = 0] > 0 and mesh_count < Num_Poly)
     [
- 
+
   ; Major bug fix 1..
   ; If a seed is not found we help out with a forced loop
-  ; Stay in untill a seed has been found 
-  ; select the outer ring of triangles, these have at least 1 free edge and are not internal 
-      
+  ; Stay in untill a seed has been found
+  ; select the outer ring of triangles, these have at least 1 free edge and are not internal
+
       ;from the outer ring  pick an edge which is truely on the border of the mesh
-      
+
       ;define the outer ring
       set ring edges with [
-                           sharedEdge = -1 and 
+                           sharedEdge = -1 and
                            sharedPoly = -1 and PolyID = ([PolyID_t] of one-of triangles with [shared_edges > 0])
                               ]
       ask ring [set color red]
-  
-      set ring_nodes nodes with [length Poly_ID <= 3 and 
+
+      set ring_nodes nodes with [length Poly_ID <= 3 and
                                  item 0 Poly_ID != [PolyID_t] of one-of triangles with [shared_edges = 0]]
-     
+
       ask ring_nodes [set color white]
-      
-        
+
+
      ; pick a node on the ring closest to the regional centre to keep things growing from the core
      set peton min-one-of ring_nodes [distancexyz-nowrap rcx rcy rcz ]
-   
+
      ;set seed one-of ring with [fromNode = peton]
      set seed one-of ring with [sharedEdge = -1 and sharedPoly = -1]
-     
-   
-     
 
-     
-        if seed != nobody 
-                  [  
+
+
+
+
+        if seed != nobody
+                  [
                      ask seed [ifelse (length [Poly_ID] of end1 >= 1 )
- 
+
                             [set color white set seed_found 1 ]
-                            [set seed nobody set seed_found 0 print "No Seed ?"]        
+                            [set seed nobody set seed_found 0 print "No Seed ?"]
                    ]
                   ]
-      
-    ]
-    
-    if (mesh_count = Num_Poly - 1 ) [stop]
-    print " Loop Again !"
-    
-  ]  
-    
-   
 
-  
-  
-  ; PROBLEM AREA get a 'that seed is dead' or 'that edge is dead' error 
+    ]
+
+    if (mesh_count = Num_Poly - 1 ) [stop]
+
+
+  ]
+
+
+
+
+
+  ; PROBLEM AREA get a 'that seed is dead' or 'that edge is dead' error
   ask edges with [sharedEdge != -1][set color green ]
   ask edges with [sharedEdge = -1][set color yellow]
-  
-  ask seed [set color violet]  
-  
+
+  ask seed [set color violet]
+
   if (seed_found = 1 and mesh_count <= Num_Poly - 0 ) [
-    
+
       ; find the nearest free node belownging to a free triangle
       let root [end2] of seed
       let rx [xcor] of root
       let ry [ycor] of root
       let rz [zcor] of root
-      let free_nodes nobody 
-      
-      ; Importantly this following set definition can only work if there is a many-to-one call 
+      let free_nodes nobody
+
+      ; Importantly this following set definition can only work if there is a many-to-one call
       ; the "of one-of" in the right side of the equality constraint makes this happen
       ; here are 2 ways of doing it...
-      
-      
-      ; 1. 
-      set free_nodes nodes with [item 0 Poly_ID = [PolyID_t] of one-of triangles with [shared_edges = 0] ]   
-      
-      ;2.
-      ;set free_nodes nodes with [member? [PolyID_t] of one-of triangles with [shared_edges = 0] Poly_ID] 
 
- 
-      
-      
-      ; apply search radius distance criteria .... 
+
+      ; 1.
+      set free_nodes nodes with [item 0 Poly_ID = [PolyID_t] of one-of triangles with [shared_edges = 0] ]
+
+      ;2.
+      ;set free_nodes nodes with [member? [PolyID_t] of one-of triangles with [shared_edges = 0] Poly_ID]
+
+
+
+
+      ; apply search radius distance criteria ....
 
       set closest min-one-of free_nodes [distancexyz-nowrap rx ry rz ]
-      
-         
+
+
 
       ; check to see if closest is also near planar to the seed poly
- 
+
       if closest != nobody [
             let nx [Norm_X] of one-of centres with [Norm_ID = 0 and Centre_ID = item 0 [Poly_ID] of closest]
             let ny [Norm_Y] of one-of centres with [Norm_ID = 0 and Centre_ID = item 0 [Poly_ID] of closest]
             let nz [Norm_Z] of one-of centres with [Norm_ID = 0 and Centre_ID = item 0 [Poly_ID] of closest]
- 
-            let regx [Norm_X] of regional-centre 
+
+            let regx [Norm_X] of regional-centre
             let regy [Norm_Y] of regional-centre
             let regz [Norm_Z] of regional-centre
-      
+
             set active-neighbours nodes with [item 0 Poly_ID = item 0 [Poly_ID] of closest]
-      
+
             let NRC_angle -1 ; Neighbour to regional centre angle
             ; set NRC_angle check-angle nx ny nz regx regy regz
             set NRC_angle 10
             show NRC_angle
-            ifelse (NRC_angle < 20 and NRC_angle != -1) 
+            ifelse (NRC_angle < 20 and NRC_angle != -1)
                   [
                    ; planar regional-centre active-neighbours
                     set neighbour one-of edges with [end2 = closest]
-                   
+
                   ]
                   [set neighbour nobody]
-      
-               
+
+
             if (dockedBad = 1) [set neighbour nobody   ]
-       
+
       ]
-  ] ; Closes the seed exists test 
-    
-    
-   
-    
-    
-    
-    
-    
+  ] ; Closes the seed exists test
+
+
+
+
+
+
+
+
     ;A seed edge and a neighbour edge have been identified
-    
-    ifelse (seed != nobody and neighbour != nobody ) 
+
+    ifelse (seed != nobody and neighbour != nobody )
         [fuse seed neighbour]
-        [ 
-        set seed nobody set neighbour nobody 
+        [
+        set seed nobody set neighbour nobody
         ;print "Done meshing"
         ]
-  
+
 end
 
 ;NAME: Fill
-; 
+;
 ;AUTHOR: Eric de Kemp
 ;
 ;DATE: January 29, 2014
@@ -1604,122 +1604,122 @@ end
 ;
 ;
 ;RETURN VALUE: None
-;              
 ;
-;PARAMETERS:            
+;
+;PARAMETERS:
 ;
 ;
 ;CALLED BY: go
 ;
 ;CALLS: none
 ;
-;NOTES: For now we assume the Fusing is done perfectly that is feeding a seed and a neighbour will seal updat eand kill old nodes and edges. 
+;NOTES: For now we assume the Fusing is done perfectly that is feeding a seed and a neighbour will seal updat eand kill old nodes and edges.
 
 
 to Fill
-  
+
   let root 0 ;
-  let a 0 ; The incoming free edge to root 
+  let a 0 ; The incoming free edge to root
   let b 0 ; The outgoing free edge to root
-  let free_a 0 ; the first free triangle edge 
+  let free_a 0 ; the first free triangle edge
   let free_b 0 ; the second free triangle edge
-  let free_root 0 ; the anchor of the free triangle connected to free_a anf free_b 
+  let free_root 0 ; the anchor of the free triangle connected to free_a anf free_b
   let free_nodes 0 ; all nodes belonging to free triangles
-  
-  
-  
-  ;Identify a root node on an existing mesh which has connections to 2 free edges AND make sure there is some free triangles to dock 
-  ifelse ( any? nodes with [length Poly_ID > 1 and count my-in-links with [sharedEdge = -1 ] = 1]  
+
+
+
+  ;Identify a root node on an existing mesh which has connections to 2 free edges AND make sure there is some free triangles to dock
+  ifelse ( any? nodes with [length Poly_ID > 1 and count my-in-links with [sharedEdge = -1 ] = 1]
           and any? triangles with [shared_edges = 0])
-                                           
-   
-          
+
+
+
          [
-          
-          set root one-of nodes with [length Poly_ID > 1 and count my-in-links with [sharedEdge = -1 ] = 1 and count my-out-links with [sharedEdge = -1] = 1 
+
+          set root one-of nodes with [length Poly_ID > 1 and count my-in-links with [sharedEdge = -1 ] = 1 and count my-out-links with [sharedEdge = -1] = 1
             and length Poly_ID > 3]
-            
-          set a one-of edges with [toNode = root and sharedEdge = -1]  
-          set b one-of edges with [fromNode = root and sharedEdge = -1]   
-          if (root != nobody and a != nobody and b != nobody and a != b)   
+
+          set a one-of edges with [toNode = root and sharedEdge = -1]
+          set b one-of edges with [fromNode = root and sharedEdge = -1]
+          if (root != nobody and a != nobody and b != nobody and a != b)
              [
-               
-              print " Doing the Filling now ...." 
-               
+
+              print " Doing the Filling now ...."
+
              ; We assume a & b are neighbours joined at root
-             
+
             ; 1. a and b are the 2 docking edges for the seed
-             
+
             ; 2. find the nearest free triangle node to root
-             
+
              set free_nodes nodes with [item 0 Poly_ID = [PolyID_t] of one-of triangles with [shared_edges = 0]]  ;
-            
-             set free_root min-one-of free_nodes [distancexyz-nowrap [xcor] of root [ycor] of root [zcor] of root]    
-             print "My happy free node is caught .." show free_root  
-               
-               
-              
-               
-               
-               
-             
+
+             set free_root min-one-of free_nodes [distancexyz-nowrap [xcor] of root [ycor] of root [zcor] of root]
+             print "My happy free node is caught .." show free_root
+
+
+
+
+
+
+
            ;  3. identify  the free polygon edges to match a and b make them Neighbours a and b
-            set free_a one-of edges with [toNode = free_root and sharedEdge = -1]  
-            set free_b one-of edges with [fromNode = free_root and sharedEdge = -1]  
-           
-           
-           
-            ;  4. fuse theses edges 
-           
-           
-           
-            set seed a 
+            set free_a one-of edges with [toNode = free_root and sharedEdge = -1]
+            set free_b one-of edges with [fromNode = free_root and sharedEdge = -1]
+
+
+
+            ;  4. fuse theses edges
+
+
+
+            set seed a
             set neighbour free_a
-            ifelse (seed != nobody and neighbour != nobody ) 
+            ifelse (seed != nobody and neighbour != nobody )
                    [fuse seed neighbour]
                    [print "no seed or no neighbour"]
-            
+
             set seed b
             set neighbour free_b
-            ifelse (seed != nobody and neighbour != nobody ) 
+            ifelse (seed != nobody and neighbour != nobody )
                    [fuse seed neighbour]
                    [print "no seed or no neighbour"]
-           
-           
-           
-           
-           
-           
-          
-     
-           
-           
-           
+
+
+
+
+
+
+
+
+
+
+
           ; 5. update all triangle node list
-           
+
           ; 6. update all nodes fused
-           
+
           ; 7. update edges fused
-           
-           
-           
-           
-           
-           
-        
-           
+
+
+
+
+
+
+
+
              ]
          ]
-         
-         ; As long as there is a node on a mesh connected to 2 free edges this will not get called. 
+
+         ; As long as there is a node on a mesh connected to 2 free edges this will not get called.
          [
-  
+
                    print "Done Filling ................"
          ]
-                     
-  
-  
-  
+
+
+
+
 end
 
 
@@ -1738,51 +1738,51 @@ end
 ;CALLS: none
 
 to fuse [edge1 edge2]
-  
+
   ; Must be adapted to handle fusing of adjacent free edges that share a common root node.
-  
-  
+
+
   print "Fusing now ..."
-  
+
   ;identify the current non-meshed triangles other then the seed
   let ONMT triangles with [shared_edges = 0 and PolyID_t != [PolyID] of edge1 ]
-  
-  
-  ;; WORKING hERE MARCH 3 , 2014  
-  
+
+
+  ;; WORKING hERE MARCH 3 , 2014
+
   ; check if free triangles have 3 common nodes
   if any? ONMT [ ask ONMT [
-                          if (count nodes with [item 0 Poly_ID = [PolyID_t] of myself] != 3) 
+                          if (count nodes with [item 0 Poly_ID = [PolyID_t] of myself] != 3)
                           [set ONMT nobody]
-                                     
+
                           ]
                 ]
-  
-  
-  
+
+
+
   ;These checks should be done before calling fuse but we do them here to be sure
-  if (                edge1 != nobody and edge2 != nobody 
+  if (                edge1 != nobody and edge2 != nobody
                   and edge1 != edge2 and ONMT != nobody
       and [toNode] of edge1 != [fromNode] of edge2
     and [fromNode] of edge1 != [toNode] of edge1
   )
-  
+
   [
-  
+
     ask edge2 [set color orange]
   ;start moving the neighbour closer to the seed
-  
+
   print "ONMT   " show ONMT
-       
+
     ;join the two edges so that the normals are poined in the same general direction
-    
-    
+
+
     ;Step 1
-    ; Identify the toNodeID of the Neighbour Edge in terms of triangle IDs i.e. node1 : toNode = 0, node2: toNode = 1, node3: toNode = 2   
+    ; Identify the toNodeID of the Neighbour Edge in terms of triangle IDs i.e. node1 : toNode = 0, node2: toNode = 1, node3: toNode = 2
     let toNodeID -1
     ifelse ([node1] of one-of ONMT with [PolyID_t = [PolyID] of edge2] = [toNode] of edge2)
             [set toNodeID 0 ]
-            [ 
+            [
               ifelse ([node2] of one-of ONMT with [PolyID_t = [PolyID] of edge2] = [toNode] of edge2)
                   [set toNodeID 1]
                   [set toNodeID 2]
@@ -1811,20 +1811,20 @@ to fuse [edge1 edge2]
     ;Make the first new link
     ;Connect with a new edge the Seed edge fromNode to the previously defined otherNodeN NOT belonging to the Neighbour edge
     ;BUT still part of the Neighbour triangle
-    ; 
     ;
-    ;Note that the link here is forced and may go out of the world 
-    
+    ;
+    ;Note that the link here is forced and may go out of the world
+
     ask [fromNode] of edge1 [ create-edge-to otherNodeN
-       [   
+       [
            ; a complicated way of matching the Edge_ID of the neighbour triangles edge from the previously defined Neighbour toNode - othernode Edge
-           set Edge_ID [Edge_ID] of edge [who] of ([toNode] of edge2) [who] of otherNodeN 
+           set Edge_ID [Edge_ID] of edge [who] of ([toNode] of edge2) [who] of otherNodeN
            ; Make the PolyID of the new edge the interior poly ID of the Neighbour
            set PolyID [PolyID] of edge2
            ; Transfer the shared edge id , which could be -1 if it wasn't previously connected
            set sharedEdge [sharedEdge] of edge [who] of ([toNode] of edge2) [who] of otherNodeN
-           ; Transfer the shared Poly id , which could be -1 if it wasn't previously connected  
-           set sharedPoly [sharedPoly] of edge [who] of ([toNode] of edge2) [who] of otherNodeN 
+           ; Transfer the shared Poly id , which could be -1 if it wasn't previously connected
+           set sharedPoly [sharedPoly] of edge [who] of ([toNode] of edge2) [who] of otherNodeN
            ; burn in the from and to nodes of the new edge
            set fromNode [fromNode] of edge1
            set toNode otherNodeN
@@ -1832,40 +1832,40 @@ to fuse [edge1 edge2]
            ;make sure the fromNode of seed knows that its now also part of the neighbour
            ;triangle, that is it has a new shared triangle
            ; Check to make sure the polyid is not allreeady on the poly list of the node
-           
+
            if (not member? [PolyID] of edge2 Poly_ID)
            [set Poly_ID lput [PolyID] of edge2 Poly_ID]
        ]
-   
+
     ;Step 5
-    ; First check if the Neighbour to - other edge (A) is meshed allready 
+    ; First check if the Neighbour to - other edge (A) is meshed allready
     ;
     ; Notice edges are beeing accessed by node pairs not specific names
-    ; 
-    
+    ;
+
     if ([sharedEdge] of edge [who] of ([toNode] of edge2) [who] of otherNodeN != -1)
-          ; interestingly the [sharedEdge] of another edge is an edge pointer not just a class like 0,1,2 
+          ; interestingly the [sharedEdge] of another edge is an edge pointer not just a class like 0,1,2
           ; If it is NOT free , that means it is meshed, pick the opposite non-neighbour edge
-          ; make it point to the neighbour poly ID 
-          ; Why was this not done in the first place ?? 
+          ; make it point to the neighbour poly ID
+          ; Why was this not done in the first place ??
           ; This looks fine now, see diagrams for better explanation
           [ ask [sharedEdge] of edge [who] of ([toNode] of edge2) [who] of otherNodeN
-                [set sharedEdge edge [who] of [fromNode] of edge1 [who] of otherNodeN 
+                [set sharedEdge edge [who] of [fromNode] of edge1 [who] of otherNodeN
                  set sharedPoly [PolyID] of edge [who] of [fromNode] of edge1 [who] of otherNodeN]
                 ;This is fine the [PolyID] of the last new edge has been previously updated.
-                ;however do the node lists of the adjacent meshed polygon (triangle) ALSO need 
-                ;to get updated. Don't see that yet. 
+                ;however do the node lists of the adjacent meshed polygon (triangle) ALSO need
+                ;to get updated. Don't see that yet.
           ]
-          
+
     ; Step 6
-    ; Make the second new link      
-    ; Why are there no conditions on this link creation ?     
+    ; Make the second new link
+    ; Why are there no conditions on this link creation ?
     ;
-    ; Note that the link here is forced and may go out of the world 
-      
-    ask [toNode] of edge1 [create-edge-from otherNodeN 
+    ; Note that the link here is forced and may go out of the world
+
+    ask [toNode] of edge1 [create-edge-from otherNodeN
           [
-            set Edge_ID [Edge_ID] of edge [who] of otherNodeN [who] of ([fromNode] of edge2) 
+            set Edge_ID [Edge_ID] of edge [who] of otherNodeN [who] of ([fromNode] of edge2)
             set PolyID [PolyID] of edge2
             set sharedEdge [sharedEdge] of edge [who] of otherNodeN [who] of ([fromNode] of edge2)
             set sharedPoly [sharedPoly] of edge [who] of otherNodeN [who] of ([fromNode] of edge2)
@@ -1875,33 +1875,33 @@ to fuse [edge1 edge2]
      ;make sure the end nodes of seed know that they're now also part of the neighbour
      ;triangle
      ; NEED to update the node1,2,3 list for all affected meshed triangles !!!
-     
-     
+
+
      ;lput is for adding an item to the end of the list
      ;add the neighbour poly ID to the toNode of Seed edge
      ;Could at this stage add a whole list of polyids from the Neighbour From node
- 
- 
+
+
      if (not member? [PolyID] of edge2 Poly_ID)
      [set Poly_ID lput [PolyID] of edge2 Poly_ID]
-     
+
     ]
-    
-    
-    
+
+
+
     ;Step 7
     ; Check if the last edge (B) is meshed
     ; if it is meshed update propertys on new edge 2
-    ; 
+    ;
     if ([sharedEdge] of edge [who] of otherNodeN [who] of ([fromNode] of edge2) != -1)
         [ask [sharedEdge] of edge [who] of otherNodeN [who] of ([fromNode] of edge2)
-             [set sharedEdge edge [who] of [toNode] of edge1 [who] of otherNodeN 
+             [set sharedEdge edge [who] of [toNode] of edge1 [who] of otherNodeN
               set sharedPoly [PolyID] of edge [who] of [toNode] of edge1 [who] of otherNodeN ]
     ]
-    
-    
-    
-    
+
+
+
+
     ;Step 8
     ;update the neighbour triangle with the new fused nodes
     ; Make the neighbour From and To nodes (node1 or node2 or node3) point to From and To nodes on Seed
@@ -1913,18 +1913,18 @@ to fuse [edge1 edge2]
                  [ set node2 [fromNode] of edge1]
                  [set node3 [fromNode] of edge1]
             ]
-              
+
      ifelse ([fromNode] of edge2 = node1)
-           [set node1 [toNode] of edge1] 
+           [set node1 [toNode] of edge1]
            [ifelse([fromNode] of edge2 = node2)
                 [set node2 [toNode] of edge1 ]
-                [set node3 [toNode] of edge1] 
+                [set node3 [toNode] of edge1]
            ]
            ]
-    
-    
-    ;step 9 
-    
+
+
+    ;step 9
+
     ;create a replacement edge for neighbour between the two seed nodes
     ; Make a new oppisite direction edge on the SEED
     ask [toNode] of edge1  [ create-edge-to [fromNode] of edge1
@@ -1935,7 +1935,7 @@ to fuse [edge1 edge2]
           set sharedPoly [PolyID] of edge1
           set fromNode [toNode] of edge1
           set toNode [fromNode] of edge1
-          ] 
+          ]
           ]
    ;Update the properties of shared edge pointer of the SEED
    ask edge1 [
@@ -1945,40 +1945,40 @@ to fuse [edge1 edge2]
    ;Update the number of shared edges for the seed and neighbour polygons
    ask triangles with [(PolyID_t = [PolyID] of edge1) or (PolyID_t = [PolyID] of edge2)]
       [set shared_edges shared_edges + 1]
-        
-        
-        
+
+
+
     ;Step 10
-    ;    
+    ;
     ; Update all adjacent meshed triangles node lists and their edges ends
-    
-   
-   
-    
-        
-    
+
+
+
+
+
+
     ;kill the old neighbour nodes which will also kill their links
     ;This is allowed because importantly the neighbour edge2 is FREE that is startes in the unmeshed state
-    
-   
-    
+
+
+
              ask [both-ends] of edge2 [die]
              ; What does mesh_count mean exactly ? how many edges are needed to be fully meshed ?
              set mesh_count mesh_count + 1
-            
-            
-            
-              
-            
-            
-            
-  
+
+
+
+
+
+
+
+
   ]
 
-  
+
 end
 
-;DESCRIPTION: This function is called once all fuse operations with the current 
+;DESCRIPTION: This function is called once all fuse operations with the current
 ;             seed have completed. It selects an appropriate seed for the next
 ;             iteration.
 ;
@@ -1991,19 +1991,19 @@ end
 ;CALLS: none
 
 to selectNextSeed
-      
-      
-    
+
+
+
        ; Could be simplified and put into original starting seed selection
-      
-       ;if  (seed = nobody) [selectNeighbour]  ; bug fix for development of an empty seed 
-       ;if  (seed = nobody) [stop]  ; bug fix for development of an empty seed 
-       
-     
-      
-       
-       
-      ; Identify the adjacent edges to the seed edge. These are the edges connected to the seed at end1 and end2 of seed 
+
+       ;if  (seed = nobody) [selectNeighbour]  ; bug fix for development of an empty seed
+       ;if  (seed = nobody) [stop]  ; bug fix for development of an empty seed
+
+
+
+
+
+      ; Identify the adjacent edges to the seed edge. These are the edges connected to the seed at end1 and end2 of seed
       if (seed != nobody and mesh_count < Num_Poly) [
       let edge1 one-of edges with [PolyID = [PolyID] of seed and Edge_ID != [Edge_ID] of seed]
       let edge2 one-of edges with [PolyID = [PolyID] of seed and Edge_ID != [Edge_ID] of seed and Edge_ID != [Edge_ID] of edge1]
@@ -2012,42 +2012,42 @@ to selectNextSeed
             ;if the edges of the current seed are still unshared, pair them
                      if [sharedEdge] of edge1 = -1
                         [set seed edge1]
-                        
-                        
+
+
                      if [sharedEdge] of edge1 != -1 and [sharedEdge] of edge2 = -1
                         [set seed edge2]
-                                  
+
                      if [sharedEdge] of edge1 != -1 and [sharedEdge] of edge2 != -1
                         [
                         ;if both of the current seed's edges are shared, pick another edge
                         ;of a triangle with edges shared with something else in the mesh
                         ;ie either 1 or 2 of the edges in this triangle is shared
- 
+
                         ; Define the outer ring triangles controlling  the mesh border
-                        let outer_meshed_triangles triangles with [shared_edges > 0 and shared_edges < 3]         
-                        let possible_centres 0   
+                        let outer_meshed_triangles triangles with [shared_edges > 0 and shared_edges < 3]
+                        let possible_centres 0
                         ask outer_meshed_triangles  [
-                                                    let ID PolyID_t  
+                                                    let ID PolyID_t
                                                     set possible_centres centres with [Norm_ID = 0 and Centre_ID = ID]
                                                     ]
                        ; origin is the first seed edge defined only once at the start
-         
+
                        if origin != nobody  [ask one-of centres with [Centre_ID = [PolyID] of origin and Norm_ID = 0 ]
                                                                      [
                                                                      ;let closest one-of possible_centres
                                                                      let closest min-one-of possible_centres [distancexyz-nowrap xcor ycor zcor]
                                                                      ;an open edge of the closest centre with open edges
                                                                      if closest != nobody
-                                                                              [set seed one-of edges with [sharedEdge = -1 and PolyID = [Centre_ID] of closest]] 
-                                                                      
-                                                                     
+                                                                              [set seed one-of edges with [sharedEdge = -1 and PolyID = [Centre_ID] of closest]]
+
+
                                                                      ]
                                              ]
                        ]
              ]
-        
+
       ]
-       
+
 end
 
 ;DESCRIPTION: This function determines whether or not a list contains a search key.
@@ -2063,15 +2063,15 @@ end
 ;CALLS: none
 ;
 ;Description: Needs to search a list of Polygon IDs to see if a node belongs to a tringle
-;             changed from previous code using foreach on a list to member? 
+;             changed from previous code using foreach on a list to member?
 to-report contains[polygon searchKey]
-  
+
   let in 0
-  
+
   if member? searchKey polygon [set in 1 ]
-  
+
   report in
-  
+
 end
 
 
@@ -2079,7 +2079,7 @@ end
 
 
 ;NAME: check-topology
-; 
+;
 ;AUTHOR: Eric de Kemp
 ;
 ;DATE: January 28, 2014
@@ -2088,53 +2088,53 @@ end
 ;
 ;
 ;RETURN VALUE: index  = a float between 0 and 1
-;              
 ;
-;PARAMETERS:            
+;
+;PARAMETERS:
 ;
 ;                   n = total of nodes matching criteria
-;                 nt  = total nodes 
+;                 nt  = total nodes
 ;         free_edges  = number of free unshared edges
 ;                  et =  total =edges
 ; connected_triangles =  fuly meshed triangles
-;      
-;    index = ndex ((n / nt)  + (connected_triangles / Num_Poly) - (free_edges / et) + 1) / 2 
+;
+;    index = ndex ((n / nt)  + (connected_triangles / Num_Poly) - (free_edges / et) + 1) / 2
 ;
 ;CALLED BY: selectNextSeed
 ;
 ;CALLS: none
 
 to-report check-topology
-       
-       
+
+
        ;Report and plot the ratio of triangles to shared edges
-       ;  A good mesh outcome is when the meshing index is > .6 
-       ;  Develop metrics for diagosing a good mesh 
-       
+       ;  A good mesh outcome is when the meshing index is > .6
+       ;  Develop metrics for diagosing a good mesh
+
        let n 0 ; total of nodes matching criteria
-       let nt 0; total nodes 
+       let nt 0; total nodes
        let free_edges 0 ; number of free unshared edges
        let et 0 ; total edges
        let connected_triangles 0 ; fuly meshed triangles
        set index 0 ; topology index showing goodness of meshing
-       
+
        set n count nodes with [length Poly_ID > 5]
        set nt count nodes
        set free_edges count edges with [sharedEdge = -1]
        set et count edges
-       set connected_triangles count triangles with [shared_edges = 3]  
+       set connected_triangles count triangles with [shared_edges = 3]
 
-       set index ((n / nt)  + (connected_triangles / Num_Poly) - (free_edges / et) + 1) / 2 
-      
-       
+       set index ((n / nt)  + (connected_triangles / Num_Poly) - (free_edges / et) + 1) / 2
+
+
        set-current-plot "Topology"
        set-current-plot-pen "index"
        plot index
        report index
-       
-end  
 
-;DESCRIPTION: This function determines whether a potential fuse is illegal (ie. 
+end
+
+;DESCRIPTION: This function determines whether a potential fuse is illegal (ie.
 ;             the seed/neighbour combination chosen cannot work)
 ;
 ;RETURN VALUE: 0 - false
@@ -2142,149 +2142,149 @@ end
 ;
 ;PARAMETERS: none
 ;
-;CALLED BY: selectNeighbour 
+;CALLED BY: selectNeighbour
 ;
 ;CALLS: contains
 
 to-report dockedBad
-  
+
   let bad 0
-  
+
   ;Eric does this cover all cases of shared nodes and not shared nodes ???
-  
+
   ;if neighbour's triangle is docked and it shares a node with seed and that node
   ;has degree of < 7
-  
-    ;if neighbour is docked     
-    
+
+    ;if neighbour is docked
+
    ;;; FIX here ... we have an empty neighbour but it would be empty from the calling program
-   
-   
-   ; If a neighbour edge is part of a docked-meshed triangle 
-  
+
+
+   ; If a neighbour edge is part of a docked-meshed triangle
+
     ;set meshed_triangle one-of triangles with [shared_edges > 0]
-    
+
    ;If we lose the seed we have a problem !!!
-    
+
     ;if (is-agent? meshed_triangle and [PolyID_t] of meshed_triangle = [polyID] of neighbour)
-    
-    
-    
+
+
+
    ifelse (neighbour = nobody) [set bad 1][
-   if [shared_edges] of one-of triangles with [PolyID_t = [PolyID] of neighbour] > 0 
+   if [shared_edges] of one-of triangles with [PolyID_t = [PolyID] of neighbour] > 0
    [
      let shared nobody  ; Need to be carful here, a node may have an internal agent number = 0
-     
+
      ;if seed and neighbour share a node
-     ; could of just used "member? value list" function 
-     
-     ; Note that fromNode and toNode store a single agent 
-     
-     ; Poly_ID a list numbers NOT a list of agents   
-     
-    
-     
-     ;Does the seed edge have the same toNode as the neighbour  
-     if contains ([Poly_ID] of [toNode] of neighbour) ([PolyID] of seed) = 1 and 
+     ; could of just used "member? value list" function
+
+     ; Note that fromNode and toNode store a single agent
+
+     ; Poly_ID a list numbers NOT a list of agents
+
+
+
+     ;Does the seed edge have the same toNode as the neighbour
+     if contains ([Poly_ID] of [toNode] of neighbour) ([PolyID] of seed) = 1 and
         contains ([Poly_ID] of [toNode] of seed) ([PolyID] of neighbour) = 1
       [
         set shared [toNode] of seed
       ]
-     if (contains ([Poly_ID] of [fromNode] of neighbour) ([PolyID] of seed) = 1 and 
+     if (contains ([Poly_ID] of [fromNode] of neighbour) ([PolyID] of seed) = 1 and
         contains ([Poly_ID] of [toNode] of seed) ([PolyID] of neighbour) = 1)
      [
        set shared [toNode] of seed
      ]
-     if (contains ([Poly_ID] of [toNode] of neighbour) ([PolyID] of seed) = 1 and 
+     if (contains ([Poly_ID] of [toNode] of neighbour) ([PolyID] of seed) = 1 and
         contains ([Poly_ID] of [fromNode] of seed) ([PolyID] of neighbour) = 1)
      [
        set shared [fromNode] of seed
      ]
-     if (contains ([Poly_ID] of [fromNode] of neighbour) ([PolyID] of seed) = 1 and 
+     if (contains ([Poly_ID] of [fromNode] of neighbour) ([PolyID] of seed) = 1 and
         contains ([Poly_ID] of [fromNode] of seed) ([PolyID] of neighbour) = 1)
-            
+
      [
-       set shared [fromNode] of seed    
+       set shared [fromNode] of seed
      ]
-      
-      
-     
-      
-     ifelse shared != nobody 
+
+
+
+
+     ifelse shared != nobody
      [
-       ; asks the opposite to shared end of a seed 
-       
+       ; asks the opposite to shared end of a seed
+
        ; BUG here which occurrs when shared is not a node on a neighbour edge
        ; There may be a false seed node selection above which is not actually shared with neighbour
-       
-       
-       ; To get past this we definately need at least one shared node between neighbour and seed 
-       ask shared 
+
+
+       ; To get past this we definately need at least one shared node between neighbour and seed
+       ask shared
        [
-         
-         ;see if shared node is a member of seed 
+
+         ;see if shared node is a member of seed
          ask seed [
-             
-           ifelse ([who] of end1 = [who] of myself or [who] of end2 = [who] of myself) 
-                           [   ;print "Good seed !!!" 
+
+           ifelse ([who] of end1 = [who] of myself or [who] of end2 = [who] of myself)
+                           [   ;print "Good seed !!!"
                               ]
-                           [   ;print "Bad seed !!!"   
+                           [   ;print "Bad seed !!!"
                                set bad 1 ]
                   ]
-                   
+
          ;see if shared is a memebr of neighbour
          ask neighbour [
-             
-           ifelse ([who] of end1 = [who] of myself or [who] of end2 = [who] of myself) 
-                           [   ;print "Good neighbour !!!" 
+
+           ifelse ([who] of end1 = [who] of myself or [who] of end2 = [who] of myself)
+                           [   ;print "Good neighbour !!!"
                               ]
-                           [   ;print "Bad neighbour !!!" 
+                           [   ;print "Bad neighbour !!!"
                                set bad 1  ]
                   ]
-         
-         
-         
+
+
+
            let N 0
            let S 0
-           
-          if (bad != 1) [ 
+
+          if (bad != 1) [
           ask neighbour
           [
            ask seed [set color red]
-           
-           
-           
+
+
+
            ;print seed
            ;if seed = nobody [ print "Lost our seed again !!! :("   ]
            ;if neighbour = nobody [ print "Lost our neighbour again !!! :("   ]
           ; print "in the other-end check  "
            ;print shared
-           ; Somtimes there is a broken link 
-           set N other-end 
-          ] 
+           ; Somtimes there is a broken link
+           set N other-end
+          ]
           ask seed
           [
-           set S other-end 
+           set S other-end
           ]
           ask N
           [
-           if distancexyz-nowrap [xcor] of S [ycor] of S [zcor] of S > .1 
+           if distancexyz-nowrap [xcor] of S [ycor] of S [zcor] of S > .1
            [
             set bad 1
-           ] 
-        ] 
+           ]
+        ]
        ]
        ]
      ]
      [
       ;if they don't share a node, it's automatically bad
-      set bad 1 
-      
+      set bad 1
+
      ]
    ]
-   ] 
+   ]
   report bad
-  
+
 end
 
 
@@ -2296,7 +2296,7 @@ end
 ;             in the case that two adjacent edges should be joined but they are not
 ;             the current seed/neighbour selection. Basically a open cut of the mesh.
 ;
-;RETURN VALUE: none 
+;RETURN VALUE: none
 ;
 ;PARAMETERS: none
 ;
@@ -2304,19 +2304,19 @@ end
 ;
 ;CALLS: none
 ;
-; Notes:  Trying to replace with Fill proceedure 
+; Notes:  Trying to replace with Fill proceedure
 
 
 to zipHex
-  
-  
-  
-  
-  ;;;;;;;  Working here  Feb 18, 2014 
+
+
+
+
+  ;;;;;;;  Working here  Feb 18, 2014
   ;
-  ;        Making a better zip up works now during active meshing 
-  ; 
-  
+  ;        Making a better zip up works now during active meshing
+  ;
+
   ;print " In ZipHex .."
   let ring nobody ; set of meshed nodes along outer ring
   let a 0 ; temporary edges
@@ -2324,37 +2324,37 @@ to zipHex
   let angle -99999 ; interedge angle at root
   let foa nobody; [fromNode] of a
   let tob nobody; [toNode] of b
-  let Tb nobody ; the inside triangle of b 
-  let Ta nobody ; the inside triangle of a 
+  let Tb nobody ; the inside triangle of b
+  let Ta nobody ; the inside triangle of a
   let root nobody
   let newb nobody
   let enda nobody
-  let E4 nobody; the new link from a FROM hanger link (STEP 4) 
+  let E4 nobody; the new link from a FROM hanger link (STEP 4)
   let E5 nobody; the new link from a TO hanger link (STEP 5)
   let tn nobody
   let fn nobody
   let meto nobody
   let mefrom nobody
-  let good 0 ; switch to go ahead with a zip up 
+  let good 0 ; switch to go ahead with a zip up
   let hangers_to nobody        ; edges connected TO the end of b
   let hangers_from nobody      ; edges connected FROM the end of b
   let tot_hangers_to 0    ; total hangers_to
   let tot_hangers_from 0  ; total hangers_from
   let num_hangers_to 0    ; active number of hangers_to
   let num_hangers_from 0  ;active number of hangers_from
- 
+
  ;STEP 1 of zipHex
  ;
  ;Find a root node that meets the criteria of :
- ;     
+ ;
  ;     a) a node on one of the outer ring meshed triangles
  ;     b) has an incoming = V1 and outgoing = V2 free edge
  ;     c) has 6 or less polygons
  ;     d) has acute V1 and V2 angle
 
- 
 
-; Find out up front if the traingle topology is all OK 
+
+; Find out up front if the traingle topology is all OK
 ; print "--------------    INITIAL TRIANGLE TOPOLOGY CHECK ---------------"
 ;ask triangles [if (tnode-check = 0)  [ print "check is good here "]]
 
@@ -2363,34 +2363,34 @@ ask nodes with  [
                                 length Poly_ID > 5 and length Poly_ID <= 6 and
                              count my-in-edges > 5 and count my-in-edges <= 6 and
                             count my-out-edges > 5 and count my-out-edges <= 6 and
-      count my-in-edges with [sharededge = -1] = 1 and 
-     count my-out-edges with [sharededge = -1] = 1 
+      count my-in-edges with [sharededge = -1] = 1 and
+     count my-out-edges with [sharededge = -1] = 1
                 ]
            [
-            set root self  
-  
+            set root self
+
             ask edges with [toNode = root and sharedPoly = -1]
                                    [ set a self ]
-                                    
-                                         
+
+
             ask edges with [fromNode = root and sharedPoly = -1]
                                     [set b self ]
-                      
-     
 
 
 
-           if (a != nobody and b != nobody and a != b and root != nobody) 
+
+
+           if (a != nobody and b != nobody and a != b and root != nobody)
 
 
        [ ask root [
-       
-      
+
+
        print "          Mesh Code Time stamp -    " show date-and-time
        print "             "
        print "Processing Outer Ring for cuts ...  "
        print "mesh_count : "show mesh_count
-       set color yellow set size 1  
+       set color yellow set size 1
 
        ;set a one-of my-in-links with [sharededge = -1]
        ;set b one-of my-out-links with [sharededge = -1]
@@ -2398,30 +2398,30 @@ ask nodes with  [
 
        ; check angle condition on all ring nodes last check to pick a root node
        ; length of segment a and b (from - to)
-       let xla ( [xcor] of [end2] of a - [xcor] of [end1] of a ) 
+       let xla ( [xcor] of [end2] of a - [xcor] of [end1] of a )
        let yla ( [ycor] of [end2] of a - [xcor] of [end1] of a )
        let zla ( [zcor] of [end2] of a - [xcor] of [end1] of a )
-       
+
        let xlb ( [xcor] of [end2] of b - [xcor] of [end1] of b )
        let ylb ( [ycor] of [end2] of b - [xcor] of [end1] of b )
        let zlb ( [zcor] of [end2] of b - [xcor] of [end1] of b )
-       
+
        let la sqrt (xla ^ 2 + yla ^ 2 + zla ^ 2)
        let lb sqrt (xlb ^ 2 + ylb ^ 2 + zlb ^ 2)
-       
+
        let dot dotProd xla yla zla xlb ylb zlb
-       
+
        set angle acos (  dot / (la * lb)  )
- 
+
              ; check for acute angle     (obtuse is > 180)
-             if (angle < 360 and angle != -99999) [set good 1] 
-                   
+             if (angle < 360 and angle != -99999) [set good 1]
+
              ifelse (root != nobody and good = 1)
              ; ifelse (root != nobody )
-            
+
                     [
-                    ask a [set color blue] 
-                    ask b [set color white]  
+                    ask a [set color blue]
+                    ask b [set color white]
                     ask root [set color red set size 2 ]
                    print "Got a root! "
                     print "Root Angle is : " show angle show root
@@ -2431,98 +2431,98 @@ ask nodes with  [
                     set a nobody
                     set b nobody
                     set good -1
-                    
-                    ] 
-      
-      
+
+                    ]
+
+
   ]
 ]
 ]
-   
-     ;STEP 2 
-     ;Link the free edges of seperate triangles connected to root
-     ; 
 
-     
- if (root != nobody and a != nobody and b != nobody and a != b and good = 1) [ 
+     ;STEP 2
+     ;Link the free edges of seperate triangles connected to root
+     ;
+
+
+ if (root != nobody and a != nobody and b != nobody and a != b and good = 1) [
    ask root [
-                 
-        
-   
-    
-     
-     
-         
-     
+
+
+
+
+
+
+
+
        ;simplify variables
        if foa = nobody [set foa [fromNode] of a]
        if tob = nobody [set tob [toNode] of b]
-     
-    
-    
-     ; STEP 3 
-     ; Join free edge b to edge a 
+
+
+
+     ; STEP 3
+     ; Join free edge b to edge a
          ask [fromNode] of b
              [
              create-edge-to foa
-                         [ 
+                         [
                          set Edge_ID [Edge_ID] of b
                          set PolyID [PolyID] of b
-                         set sharedEdge a 
+                         set sharedEdge a
                          set sharedPoly [PolyID] of a
                          set fromNode [fromNode] of b
                          set toNode foa
                          ]
-                         
-            
-      
-             ; add a poly to the foa 
+
+
+
+             ; add a poly to the foa
              ask foa [set Poly_ID lput [PolyID] of b Poly_ID]    ; From Erics code
-             
+
              ;make sure a knows that it's shared with b now
              ask a
                 [
-                set sharedEdge b 
+                set sharedEdge b
                 set sharedPoly [PolyID] of b
                 ]
-             
-            ; update the inside triangles of a and b 
-            set Tb one-of triangles with [PolyID_t = [POLYID] of b] 
-            set Ta one-of triangles with [PolyID_t = [POLYID] of a] 
-            ask Tb [set shared_edges shared_edges + 1 ] 
-            ask Ta [set shared_edges shared_edges + 1 ] 
-              
-          
-             
-            ask Tb [print "Node1 Node2 Node3 : " show node1 show node2 show node3 ]  
-             
-             
+
+            ; update the inside triangles of a and b
+            set Tb one-of triangles with [PolyID_t = [POLYID] of b]
+            set Ta one-of triangles with [PolyID_t = [POLYID] of a]
+            ask Tb [set shared_edges shared_edges + 1 ]
+            ask Ta [set shared_edges shared_edges + 1 ]
+
+
+
+            ask Tb [print "Node1 Node2 Node3 : " show node1 show node2 show node3 ]
+
+
              ;make sure the end nodes of A know that they're now also part of the B triangle
-             ;update the from node of a          
-              
-             
-             
+             ;update the from node of a
+
+
+
              ;set Poly_ID lput [PolyID] of b Poly_ID  ; From Sarahs  code , this just looks wrong .....
-             
-             
-             
-             
-               
+
+
+
+
+
              ; Don't need to remap the a triangle's nodes since they don't move
-    
+
              ;update the b triangle with the new fused nodes
-             
-             
-             
+
+
+
              let count_traingles count triangles with [PolyID_t = [POLYID] of b]
-             print " Number of B - Triangles : " show count_traingles 
-             
-             
-             
-             
+             print " Number of B - Triangles : " show count_traingles
+
+
+
+
              ask Tb
                    [
-                     
+
                      let remaped 0
                      ifelse (tob = node1)
                            [set node1 foa set remaped 1 ]
@@ -2531,45 +2531,45 @@ ask nodes with  [
                                     [if (tob = node3) [set node3 foa set remaped 1 ]]
                            ]
                      ifelse (remaped = 1 ) [print "Triangle - B nodelist remapped" ] [print "Triangle - B nodelist NOT remapped  !!!" ]
-                   ]   
-    
+                   ]
+
              ]
-             
-            
-             
+
+
+
              ; display the a and b edges and their to & from ends
              let ab []
              set ab list a b
-             print "A & B :" show ab  
-   
-            
-    ;STEP 4   HANGERS_TO 
+             print "A & B :" show ab
+
+
+    ;STEP 4   HANGERS_TO
     ;
     ;update all edges and adjacent trinagles that END at the disappearing node of b
     ; this is all my-inlinks of toNode of b that are not linked to root
-    
-    
+
+
     ; We don't care yet if 'hangers' are free edges or shared edges but need to cary that property later.
-    ; Nothing changes in the topology status, the hangers ALL cary their triangle IDS and shared edges 
+    ; Nothing changes in the topology status, the hangers ALL cary their triangle IDS and shared edges
     ; and shared polyugons
-    
+
     set hangers_to edges with [toNode = tob and fromNode != root and fromNode != foa
-                    and toNode != fromNode ] 
-     
-    if (hangers_to != nobody)  [                                   
-        set tot_hangers_to count hangers_to                 
-       ; print "STEP 4 : " 
-        ask hangers_to [   
-        
-                      
+                    and toNode != fromNode ]
+
+    if (hangers_to != nobody)  [
+        set tot_hangers_to count hangers_to
+       ; print "STEP 4 : "
+        ask hangers_to [
+
+
            print "Hanger links TO end of b :"
-           show hangers_to              
+           show hangers_to
            set meto self ; the single active hanger_to edge
-      
-                   ask fromNode 
+
+                   ask fromNode
                        [
                        set fn self
-                       
+
                       create-edge-to foa
                                [
                                        ;don't mess up current seed and neighbour
@@ -2577,192 +2577,192 @@ ask nodes with  [
                                        set E4 self
                                        if seed = meto [set seed E4]
                                        if neighbour = meto [set neighbour E4]
-          
+
                                        set Edge_ID [Edge_ID] of meto
                                        set PolyID [PolyID] of meto
                                        ;shared things should remain the same
                                        ;yes for sure no change here
-                                       set sharedEdge [sharedEdge] of meto 
+                                       set sharedEdge [sharedEdge] of meto
                                        set sharedPoly [sharedPoly] of meto
                                        set fromNode [fromNode] of meto
                                        ;redirect only this one
                                        set toNode foa
-                                       
+
                                        ]
-                               
-                            
-                               
-                               
+
+
+
+
                       ifelse (E4 != nobody)  [
-                        
+
                       ask one-of triangles with [PolyID_t = [PolyID] of meto]
                                                 [
                                                 ifelse (fn = node1)
                                                        [set node1 foa]
                                                       [ifelse (fn = node2)
                                                                [set node2 foa]
-                                                               [if (fn = node3) 
+                                                               [if (fn = node3)
                                                                    [set node3 foa]]
-                                                       
-            
+
+
                                                       ]
-                                                 set num_hangers_to num_hangers_to + 1      
+                                                 set num_hangers_to num_hangers_to + 1
                                                  ]
-                      ;update the from node of a          
-                     ; ask foa [set Poly_ID lput [PolyID] of meto Poly_ID] 
-                      
-                                               
-                      ] ; check if newEdge exisits 
+                      ;update the from node of a
+                     ; ask foa [set Poly_ID lput [PolyID] of meto Poly_ID]
+
+
+                      ] ; check if newEdge exisits
                       [print "New edge E4 from  STEP 4 not created !!!"]
-                      
-                                             
+
+
                ]
-                
-        ]  ;  end of Step 4 asking hangers_to to be zipped 
-    ] ; hangers_to exists  
-     
-  
-  
+
+        ]  ;  end of Step 4 asking hangers_to to be zipped
+    ] ; hangers_to exists
+
+
+
   ;print "--------------    STEP 4  TRIANGLE TOPOLOGY CHECK ---------------"
   ;ask triangles [if (tnode-check = 0)  [ print "check is good here "]]
-  
-   
- 
-     
-    ;STEP 5    HANGERS_FROM       
-    ;            
+
+
+
+
+    ;STEP 5    HANGERS_FROM
+    ;
     ; update all edges and adjacent trinagles that START at the disappearing node of b
     ; added second condition here ..... and toNode != [fromNode] of b
     ;
     ;
-    ; Everytime this step is used it makes duplicated triangle nodes 
-    
-   
-    
+    ; Everytime this step is used it makes duplicated triangle nodes
+
+
+
     set hangers_from edges with [fromNode = tob and toNode != root and toNode != foa
-                    and toNode != fromNode ]               
-                   
-    if hangers_from != nobody  [     
-      
+                    and toNode != fromNode ]
+
+    if hangers_from != nobody  [
+
          set tot_hangers_from count hangers_from
-      
-      
-        print "STEP 5 : "  
-        ask hangers_from [  
-                    
+
+
+        print "STEP 5 : "
+        ask hangers_from [
+
            print "Hanger links FROM end of b :"
-           show hangers_from              
+           show hangers_from
            set mefrom self ; the single active hanger edge
-   
-           ask toNode 
-               [             
+
+           ask toNode
+               [
                set tn self  ; single end node of the active hanger
                ;Note that the link here is forced and may go out of the world
-               create-edge-from foa  
+               create-edge-from foa
                      [
                      ;don't mess up current seed and neighbour
                      set E5 self
                      ; check seed and neighbour status
                      if seed = mefrom [set seed E5]
                      if neighbour = mefrom [set neighbour E5]
-          
+
                      set Edge_ID [Edge_ID] of mefrom
                      set PolyID [PolyID] of mefrom
                      ;shared things should remain the same
-                     set sharedEdge [sharedEdge] of mefrom 
+                     set sharedEdge [sharedEdge] of mefrom
                      set sharedPoly [sharedPoly] of mefrom
                      ; reset this next node only
                      set fromNode foa
                      set toNode [toNode] of mefrom
-                     
+
                      ]
- 
-        ; Big monster bug solved ! Jan 22 
-        ; Last triangle doesn't need to have nodes remapped , this causes duplicate nodes ! 
-        ; The result was false calculations with on-edge barycentres 
+
+        ; Big monster bug solved ! Jan 22
+        ; Last triangle doesn't need to have nodes remapped , this causes duplicate nodes !
+        ; The result was false calculations with on-edge barycentres
         ;
         ; Not realy the probelm still exists .... last node3 assignement to foa is wrong if it has allready been mapped
-        ; this will randomly assin the node3 to the last tn 
-         
-        
+        ; this will randomly assin the node3 to the last tn
+
+
         ifelse (E5 != nobody) [
-        
+
         ; Note that the Node (node1, node2, node3) order is extremely important here
-        
+
         ask one-of triangles with [PolyID_t = [PolyID] of mefrom ]
-                                           
-                                                [ 
-                                                
+
+                                                [
+
                                                 ifelse (tn = node1)
                                                       [set node3 foa]
                                                       [ifelse (tn = node2)
                                                                [set node1 foa]
                                                                [if (tn = node3) [set node2 foa]]
-                                                             
-                                                      ]
-                                                  set num_hangers_from num_hangers_from + 1  
-                                                  
-                                                ]
-                                                
-                                                
-                                                
-          ;update the from node of a          
-          ;ask foa [set Poly_ID lput [PolyID] of mefrom Poly_ID]   
-          ] ; check if newEdge exisits  
-          [print "New edge E5 from  STEP 5 not created !!!"]                         
-                                         
-                                  
-      ]    ; <----   End of toNode of hangers_from (missing ; before END could be our bug alll along !!!!)
-     ]   ;  end of Step 5 asking hangers_from to be zipped 
-     
-  ]    ; hangers_from exists   
-    
-    
-  
-  
-  
-   ; Before killing tob make sure ALL participant elements of the fuse of a and b are UPDATED !!!!
-   
-   ; Once tob is dead we should not need to go back to a or b work 
-   
-   
-   
-                   
-        
-    print "--------------    STEP 5  TRIANGLE TOPOLOGY CHECK ---------------"
-           
-         
-             
-                
-                 ask tob [  print "Killing tob node : " show self die]
-                 
-                
-                      
-    
-    
-    
-    
-      
 
-  
-            
-  
-  
- ]  ; end of root ask 
-]  ; end of edge a and b custom 'zip-up' fusing 
- 
- if (num_hangers_to > 0 or num_hangers_from > 0) 
+                                                      ]
+                                                  set num_hangers_from num_hangers_from + 1
+
+                                                ]
+
+
+
+          ;update the from node of a
+          ;ask foa [set Poly_ID lput [PolyID] of mefrom Poly_ID]
+          ] ; check if newEdge exisits
+          [print "New edge E5 from  STEP 5 not created !!!"]
+
+
+      ]    ; <----   End of toNode of hangers_from (missing ; before END could be our bug alll along !!!!)
+     ]   ;  end of Step 5 asking hangers_from to be zipped
+
+  ]    ; hangers_from exists
+
+
+
+
+
+   ; Before killing tob make sure ALL participant elements of the fuse of a and b are UPDATED !!!!
+
+   ; Once tob is dead we should not need to go back to a or b work
+
+
+
+
+
+    print "--------------    STEP 5  TRIANGLE TOPOLOGY CHECK ---------------"
+
+
+
+
+                 ask tob [  print "Killing tob node : " show self die]
+
+
+
+
+
+
+
+
+
+
+
+
+
+ ]  ; end of root ask
+]  ; end of edge a and b custom 'zip-up' fusing
+
+ if (num_hangers_to > 0 or num_hangers_from > 0)
   [
-    
-    print " Hangers To :" show num_hangers_to 
+
+    print " Hangers To :" show num_hangers_to
     print " Hangers From :" show num_hangers_from
   ]
- 
- 
-;print "                                              "  
-;print " .........Done Outer Ring recalculation  ............."  
-;print "                                              "    
-;print "                                              " 
+
+
+;print "                                              "
+;print " .........Done Outer Ring recalculation  ............."
+;print "                                              "
+;print "                                              "
 
 
 
@@ -2774,104 +2774,104 @@ ask nodes with  [
 end
 
 
-;DESCRIPTION: Smoothing function for mesh border. Runs after all meshing completed initial run. 
-;             Joins adjacent outer ring edges based on roughness criteria  
+;DESCRIPTION: Smoothing function for mesh border. Runs after all meshing completed initial run.
+;             Joins adjacent outer ring edges based on roughness criteria
 ;
-;CREATOR: Eric de Kemp 
+;CREATOR: Eric de Kemp
 ;
 ;RETURN VALUE: none
 ;
 ;PARAMETERS: none
 ;
 ;CALLED BY: go
-; 
+;
 ;CALLS: none
 
 to SmoothBorder
 
-  let t nobody    ; active triangle from the ask 
+  let t nobody    ; active triangle from the ask
   let bc nobody   ; the centre of the triangle
   let o nobody    ; the pointy node at edge of the rough meshed triangle
-  let oe nobody   ; an outer edge 
+  let oe nobody   ; an outer edge
   let tID -1      ; Active Triangle ID
   let deaths 0    ;
   let births 0    ; replacemnent triangles
   ask edges [if (sharedEdge = nobody) [set sharedEdge -1]]
   ask edges [if (sharedPoly = nobody) [set sharedPoly -1]]
-  ask edges [ifelse (sharedPoly = -1 and sharedEdge = -1) [set color yellow][set color green]] 
-    
+  ask edges [ifelse (sharedPoly = -1 and sharedEdge = -1) [set color yellow][set color green]]
+
 
 ; check the health of the triangles
 if ( mesh_count = Num_Poly - 1)  [
-   
-   
-  ; Clean out any orphan triangles. These are triangles with no geometric expression.  
+
+
+  ; Clean out any orphan triangles. These are triangles with no geometric expression.
   ; We often have 2 centres in different places for the same triangle
   ; that is a duplicate centre not colocated How to kill the wrong one and keep the right one ?
-  ; Not an easy fix since we need to eliminate based on spatial differences not properties. It is 
+  ; Not an easy fix since we need to eliminate based on spatial differences not properties. It is
   ; at least happening inside SmoothBorder
-  
 
-   
+
+
   ; check triangle topology and recode shared_edges property
-  ask nodes with [count my-in-edges = 1 and count my-out-edges = 1 and length Poly_ID = 1] 
-                        
+  ask nodes with [count my-in-edges = 1 and count my-out-edges = 1 and length Poly_ID = 1]
+
                        [
-                        set tID item 0 [Poly_ID] of self                        
-                        ask triangles with [PolyID_t = tID] [set shared_edges 1]                     
-                        
+                        set tID item 0 [Poly_ID] of self
+                        ask triangles with [PolyID_t = tID] [set shared_edges 1]
+
                         ]
-       
+
   ; Set the new topology status
-   ask triangles [   
-    
+   ask triangles [
+
       set t self
       set tID [PolyID_t] of t
       set bc one-of centres with [Centre_ID = tID]
-      
-      if (shared_edges = 0) [set status 0 ask bc [set color green]] 
+
+      if (shared_edges = 0) [set status 0 ask bc [set color green]]
       if (shared_edges = 1) [set status 1 ask bc [set color white]]
       if (shared_edges = 2) [set status 2 ask bc [set color blue]]
       if (shared_edges = 3) [set status 3 ask bc [set color red]]
-  
+
    ]
-  
-while [count triangles with [status = 1] > 0 ]  [  
-     
-  
+
+while [count triangles with [status = 1] > 0 ]  [
+
+
      ; Adress the meshed triangles not the free ones
      ask triangles with [status = 1] [
-      
+
         set t self
         set tID [PolyID_t] of t
-        
+
         set o one-of nodes with [item 0 Poly_ID = tID and length Poly_ID = 1]
-    
+
         ask nodes with [member? tID Poly_ID] [set Poly_ID remove tID Poly_ID]
         ask edges with [sharedEdge = tID] [set sharedEdge -1]
         ask edges with [sharedPoly = tID] [set sharedPoly -1 set oe PolyID]
-        ask one-of triangles with [PolyID_t = oe] [set shared_edges shared_edges - 1 set status status - 1]  
+        ask one-of triangles with [PolyID_t = oe] [set shared_edges shared_edges - 1 set status status - 1]
          ask centres with [Centre_ID = tID] [die]
         ask o [die]
         ask edges with [PolyID = tID] [die]
-         
-        
-        
-       ; Note: Only the agents that are in the agentset at the time the ask begins run the commands
-        
-        ask t [die]
-       
-     ]
-     
-  ]   
-  
 
-;make_polygon births  
+
+
+       ; Note: Only the agents that are in the agentset at the time the ask begins run the commands
+
+        ask t [die]
+
+     ]
+
+  ]
+
+
+;make_polygon births
 ;perturb
 ;update
-]  
-  
-  
+]
+
+
 end
 
 
@@ -2887,41 +2887,41 @@ end
 ;CALLS: intersect
 
 to-report tangled
-  
+
   ;assume the mesh is not tangled
   let tangle 0
-  
+
   ;compare each triangle against every other triangle *NOTE there is probably
-  ;a more efficient way than checking every triangle  
+  ;a more efficient way than checking every triangle
   ask triangles
   [
     if tangle = 0
     [
-      
+
       ;initialize the list of triangles to check this triangle against as all  other triangles
       let toCheck other triangles
-      
+
       ask toCheck
       [
         let checking one-of toCheck
-        
-        if (intersect [node1] of checking [node2] of checking node1 node2 node3) + 
-        (intersect [node2] of checking [node3] of checking node1 node2 node3) + 
-        (intersect [node3] of checking [node1] of checking node1 node2 node3) != 0        
+
+        if (intersect [node1] of checking [node2] of checking node1 node2 node3) +
+        (intersect [node2] of checking [node3] of checking node1 node2 node3) +
+        (intersect [node3] of checking [node1] of checking node1 node2 node3) != 0
         [
-          set tangle 1 
-        ] 
-        
+          set tangle 1
+        ]
+
         ask checking
         [
           set toCheck other toCheck
         ]
       ]
-    ]    
-  ] 
-  
+    ]
+  ]
+
   report tangle
-  
+
 end
 
 ;DESCRIPTION: This function determines whether a segment intersects a triangle
@@ -2938,75 +2938,75 @@ end
 ;CALLS: dotProd
 
 to-report intersect [P0 P1 V0 V1 V2]
-  
+
   ;initialize intersection
   let intersection 0
-  
+
   let x0 [xcor] of V0
   let y0 [ycor] of V0
   let z0 [zcor] of V0
-  
+
   let x1 [xcor] of V1
   let y1 [ycor] of V1
   let z1 [zcor] of V1
-  
+
   let x2 [xcor] of V2
   let y2 [ycor] of V2
   let z2 [zcor] of V2
-  
+
   let xP0 [xcor] of P0
   let yP0 [ycor] of P0
   let zP0 [zcor] of P0
-  
+
   let xP1 [xcor] of P1
   let yP1 [ycor] of P1
-  let zP1 [zcor] of P1 
- 
+  let zP1 [zcor] of P1
+
   ;determine the normal vector of the triangle
   let uX x1 - x0
   let uY y1 - y0
   let uZ z1 - z0
-     
+
   let vX x2 - x0
   let vY y2 - y0
   let vZ z2 - z0
-     
+
   ;n is u cross v
   let Xnorm uY * vZ - uZ * vY
   let Ynorm uZ * vX - uX * vZ
   let Znorm uX * vY - uY * vX
-  
+
   ;here we have the plane P through V0 with normal (Xnorm, Ynorm, Znorm) and the
   ;line from P0 to P1
   ;the intersection point r = n dot(V0 - P0) / n dot(P1-P0)
   ;let a represent V0 - P0 and b represent P1 - P0
-  
+
   let aX x0 - xP0
   let aY y0 - yP0
   let az z0 - yP0
-  
+
   let bX xP1 - xP0
   let bY yP1 - yP0
   let bz zP1 - zP0
-  
+
   ;calculate the numerator n dot a
-  
+
   let num aX * Xnorm + aY * Ynorm + aZ * Znorm
-  
+
   ;calcualte the denominator n dot b
-  
+
   let denom bX * Xnorm + bY * Ynorm + bZ * Znorm
-  
-  
+
+
   ;if denom is negative, there is no intersection
   ;if denom is 0, either no intersection or the line lies completely in the plane
-  
+
   if denom > 0
   [
     ;calculate r
-    
+
     let r num / denom
-  
+
     ;if 0 <= r <= 1, there is a single intersection with the plane
     if r >= 0 and r <= 1
     [
@@ -3014,29 +3014,29 @@ to-report intersect [P0 P1 V0 V1 V2]
       let xIntPt xP0 + r * (xP1 - xP0)
       let yIntPt yP0 + r * (yP1 - yP0)
       let zIntPt zP0 + r * (zP1 - zP0)
-      
+
       ;if the intersection point lies within the triangle
       let wX xIntPt - [xcor] of V0
       let wY yIntPt - [ycor] of V0
       let wZ zIntPt - [zcor] of V0
-      
+
       let sIntPt_num (dotProd uX uY uZ vX vY vZ) * (dotProd wX wY wZ vX vY vZ) - (dotProd vX vY vZ vX vY vZ) * ( dotProd wX wY wZ uX uY uZ)
       let sIntPt_den (dotProd uX uY uZ vX vY vZ) * (dotProd uX uY uZ vX vY vZ) - (dotProd uX uY uZ uX uY uZ) * (dotProd vX vY vZ vX vY vZ)
       let sIntPt sIntPt_num / sIntPt_den
-      
+
       let tIntPt_num (dotProd uX uY uZ vX vY vZ) * (dotProd wX wY wZ uX uY uZ) - (dotProd uX uY uZ uX uY uZ) * ( dotProd wX wY wZ vX vY vZ)
       let tIntPt_den (dotProd uX uY uZ vX vY vZ) * (dotProd uX uY uZ vX vY vZ) - (dotProd uX uY uZ uX uY uZ) * (dotProd vX vY vZ vX vY vZ)
       let tIntPt tIntPt_num / tIntPt_den
-      
+
       if sIntPt >= 0.01 and tIntPt >= -0.001 and sIntPt + tIntPt <= 1.001
       [
         set intersection 1
-      ]  
+      ]
     ]
   ]
-  
+
   report intersection
-  
+
 end
 
 
@@ -3048,7 +3048,7 @@ end
 ;PARAMETERS: ax ay az bx by bz all components of the vector a & b
 ;
 ;CALLED BY: go
-; 
+;
 ;CALLS: dotProd
 
 to-report check-angle [ax ay az bx by bz]
@@ -3057,35 +3057,35 @@ to-report check-angle [ax ay az bx by bz]
        print "Vector components : " show ax show ay show az show bx show by show bz
 
 
-    
+
        let la sqrt (ax ^ 2 + ay ^ 2 + az ^ 2)
        let lb sqrt (bx ^ 2 + by ^ 2 + bz ^ 2)
-       
-       ;Normalize the components to be sure so ARCOS doesn't fail with division by zero or 
-       ;an out of range (-1,0,1) value  
-       
-       set ax ax / la 
+
+       ;Normalize the components to be sure so ARCOS doesn't fail with division by zero or
+       ;an out of range (-1,0,1) value
+
+       set ax ax / la
        set ay ay / la
        set az az / la
-       
-       set bx bx / lb 
+
+       set bx bx / lb
        set by by / lb
        set bz bz / lb
-       
-      
+
+
        let dot dotProd ax ay az bx by bz
-       print "Dot product " show dot 
+       print "Dot product " show dot
        print " la and lb : "show la show lb
-       
+
        print " Pre ACOS : " show dot / (la * lb)
-       
-       ;if (la != 0 and lb != 0 )  
+
+       ;if (la != 0 and lb != 0 )
              ;set Angle acos (  dot / (la * lb)  )
              ; normalization produces a unit size vector making the denominator = 1
              if dot < -1 or dot > 1 [print "Out of range..... (-1 to 1) " show dot ]
              set Angle acos (  dot  )
-             
-              
+
+
        print " Angle  : " show Angle
 report Angle
 
@@ -3103,10 +3103,10 @@ end
 ;CALLS: none
 
 to-report dotProd [ax ay az bx by bz]
-  
+
  let dot ax * bx + ay * by + az * bz
  report dot
-  
+
 end
 @#$#@#$#@
 GRAPHICS-WINDOW
@@ -3178,7 +3178,7 @@ INPUTBOX
 276
 252
 Num_Poly
-25
+50
 1
 0
 Number
@@ -3318,7 +3318,7 @@ INPUTBOX
 385
 252
 On_Surface
-0
+2
 1
 0
 Number
@@ -3727,7 +3727,7 @@ Polygon -7500403 true true 270 75 225 30 30 225 75 270
 Polygon -7500403 true true 30 75 75 30 270 225 225 270
 
 @#$#@#$#@
-NetLogo 3D 5.0.4
+NetLogo 3D 5.3.1
 @#$#@#$#@
 @#$#@#$#@
 @#$#@#$#@
@@ -3735,9 +3735,9 @@ NetLogo 3D 5.0.4
 @#$#@#$#@
 default
 0.0
--0.2 0 1.0 0.0
+-0.2 0 0.0 1.0
 0.0 1 1.0 0.0
-0.2 0 1.0 0.0
+0.2 0 0.0 1.0
 link direction
 true
 0

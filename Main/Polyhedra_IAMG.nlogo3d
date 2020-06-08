@@ -3,12 +3,12 @@ extensions [array]
 ; Program: Single_Triangle_EdK_3d
 ; Created by : Eric de Kemp
 ; Date: Jan 8, 2013
-; Modified : January 13, 2013 17:05 
+; Modified : January 13, 2013 17:05
 
 ; File: Single_Triangle_EdK_3d.NLogo
 ;
 ; Description: A 3D spatial agent set
-;              
+;
 ; Notes:   For showing triangle movement behavior
 ;
 
@@ -21,9 +21,9 @@ directed-link-breed [edges edge]
 undirected-link-breed [red-links red-link]
 
 ; Set up agent owned variables
-polygon-own [nodes start closed friends closest-friend farthest-friend connected ]   ; nodes = number of sides, closed 1 - closed (2 links on a node) 
+polygon-own [nodes start closed friends closest-friend farthest-friend connected ]   ; nodes = number of sides, closed 1 - closed (2 links on a node)
 
- 
+
 ; Set up the environment
 to setup  ; an observer based setup
   ;; (for this model to work with NetLogo's new plotting features,
@@ -34,8 +34,8 @@ to setup  ; an observer based setup
   clear-all
   zoom 40
   orbit-down 30
-  orbit-left 90  
-  reset-ticks 
+  orbit-left 90
+  reset-ticks
   set x 0
   set y 0
   set z 0
@@ -50,30 +50,30 @@ to setup  ; an observer based setup
 
 
 
-to go 
-   
-  make_polygons 
-  connect 
-  ;spread 
+to go
+
+  make_polygons
+  connect
+  ;spread
   set Tcount 0
-  while [ticks <= iterations ] 
-      [  
-      print "Here !"
+  while [ticks <= iterations ]
+      [
+
       set Tcount Tcount + 1
-      ask polygon [perturb]  
-      
-      tick          
-       ]        
-  stop 
+      ask polygon [perturb]
+
+      tick
+       ]
+  stop
 end
 
 
 ;Demonstrate agent group to group connections
-to connect 
-  
+to connect
+
 set Tcount 0
-while [Tcount < polygons]  [ 
-  set Tcount Tcount + 1  ; polygon ID  
+while [Tcount < polygons]  [
+  set Tcount Tcount + 1  ; polygon ID
                          ; Select a polygon near the centre of the model and identify a member of that group
   ifelse Tcount = 1 [ask polygon [set closest-friend min-one-of polygon [distancexyz 0 0 0] ]
                        ask polygon [ask closest-friend [set color red set active_group nodes]]]
@@ -85,7 +85,7 @@ while [Tcount < polygons]  [
 ; connect the two and reposition the red-blue pairs
 ask polygon with [color = red] [create-link-to one-of polygon with [color = blue]]
 ask polygon with [color = red or color = blue] [set connected 1]
-ask polygon with [connected = 1] [repeat 50 [layout-spring polygon links tension tsize repulsion]] 
+ask polygon with [connected = 1] [repeat 50 [layout-spring polygon links tension tsize repulsion]]
 ask polygon with [color = blue] [set active_group nodes]
 ask polygon with [color = blue] [set closest-friend max-one-of polygon with [nodes = active_group] [distance myself]]
 ask polygon [ask closest-friend [set color red ]]
@@ -99,149 +99,149 @@ end
 
 
 to make_polygons
-  
- while [Tcount < polygons] [ 
+
+ while [Tcount < polygons] [
  ; Force polygons to stay on the plane
- ; not implimented yet 
-   
+ ; not implimented yet
+
    set x random-xcor
    set y random-ycor
    set z random-zcor
    set status 0
    set Tcount Tcount + 1  ; polygon ID
-   
+
    create-polygon sides [ hide-turtle set shape "dot" set nodes Tcount set start 0 set closed 0 set connected  0 setxyz x y z set size 1  set color (15 + (Tcount * 10))
                           set roll random 360 set pitch random 360 set heading random (360 - 90) forward 1 show-turtle]
    perturb
-   
-    
+
+
    seed
-   
-  
+
+
    ;check if there is still an unlinked node
    while [any? polygon with [closed = 0]] [
      perturb
      ask polygon with [nodes = Tcount] [
-      
-  
-             ; start the initial link from the seed 
+
+
+             ; start the initial link from the seed
              if any? polygon with [start = 1 and count my-out-links = 0 and count my-in-links = 0]
-                     
-               [ ask polygon with [start = 1 and count my-out-links = 0 and count my-in-links = 0] [                 
-                   set closest-friend min-one-of polygon with [ start = 0 and nodes = Tcount and count my-in-links = 0 and count my-in-links = 0] [distance myself]  
-                   set farthest-friend max-one-of polygon with [ start = 0 and nodes = Tcount and count my-in-links = 0 and count my-in-links = 0] [distance myself]    
+
+               [ ask polygon with [start = 1 and count my-out-links = 0 and count my-in-links = 0] [
+                   set closest-friend min-one-of polygon with [ start = 0 and nodes = Tcount and count my-in-links = 0 and count my-in-links = 0] [distance myself]
+                   set farthest-friend max-one-of polygon with [ start = 0 and nodes = Tcount and count my-in-links = 0 and count my-in-links = 0] [distance myself]
                    ;create-link-to farthest-friend  ]
                    create-link-to closest-friend ]
                  ]
-                  
-               
-            
+
+
+
              ;continue down the chain...
              perturb
              if any? polygon with [nodes = Tcount and start = 0 and count my-out-links = 0 and count my-in-links = 1 and closed = 0]
                [
-                 
+
                  if any? other polygon with [ nodes = Tcount and start = 0 and count my-in-links = 0 and count my-out-links = 0] [
-                       ask polygon with [start = 0 and count my-out-links = 0 and count my-in-links = 1 and closed = 0 ] 
+                       ask polygon with [start = 0 and count my-out-links = 0 and count my-in-links = 1 and closed = 0 ]
                            [
-                           ; Find nearest node 
+                           ; Find nearest node
                            set closest-friend min-one-of polygon with [nodes = Tcount and start = 0 and count my-out-links = 0 and count my-in-links = 0 and closed = 0] [distance myself]
                            set farthest-friend max-one-of polygon with [nodes = Tcount and start = 0 and count my-out-links = 0 and count my-in-links = 0 and closed = 0] [distance myself]
-                           create-link-to closest-friend 
+                           create-link-to closest-friend
                            ;create-link-to farthest-friend
                            ; create-link-to one-of other polygon with [ nodes = Tcount and start = 0 and count my-in-links = 0 and count my-out-links = 0]
-                            ask polygon with [count my-out-links = 0 and count my-in-links = 1] [set color yellow set size 2] 
-                             
+                            ask polygon with [count my-out-links = 0 and count my-in-links = 1] [set color yellow set size 2]
+
                             set closed 1 set color green set size 1]
-                 
+
                  ]
-                 
-                   ] 
-                                                                       
+
+                   ]
+
                 if count  polygon with [nodes = Tcount and closed = 1] = sides - 2    [
 
-                 
+
                  if any? other polygon with [ nodes = Tcount and start = 0 and count my-in-links = 1 and count my-out-links = 0 and closed = 0] [
-                       ask polygon with [ nodes = Tcount and start = 0 and count my-out-links = 0 and count my-in-links = 1 and closed = 0 ] 
+                       ask polygon with [ nodes = Tcount and start = 0 and count my-out-links = 0 and count my-in-links = 1 and closed = 0 ]
                            [create-link-to one-of other polygon with [ nodes = Tcount and start = 1 and count my-in-links = 0 and count my-out-links = 1]
-                           set closed 1  
-                    
+                           set closed 1
+
                             ask polygon with [color = yellow] [ set color green set size 1 ]
-                             
+
                             ask polygon with [ nodes = Tcount and start = 1] [set closed 1 set color white]
-                             
-                             
+
+
                              ]
-                 
+
                  ]
-                
+
                  ]
-                 
-              
-               
-           ; check for too many links and kill them (redundant now)       
+
+
+
+           ; check for too many links and kill them (redundant now)
            ; if count my-in-links > 2 or count my-out-links > 2
            ;    [  set closed 0 ask my-in-links [die ] ask my-out-links [die]]
-                 
-           
-          
-                          
-      
-     ; Could use a neighbor check for links as well          
+
+
+
+
+
+     ; Could use a neighbor check for links as well
      ; ifelse all? polygon [nodes = Tcount and count link-neighbors = 2] [set closed  1 set color red]  [set color white]
-                             
-        
+
+
    ]
-   
+
    ]
-    
+
  ]
-   
-   
-    
+
+
+
    ; Code from Cluster model network groupings
    ; Identify all un-linked agents that are in my group. This can be anywhere in the model space
         ;if any? other turtles with [not link-neighbor? myself and (group = mygroup)] [
           ;Make a link with one of these
           ;create-link-with one-of other turtles with [not link-neighbor? myself and (group = mygroup)]
-  
-   
- 
+
+
+
 end
 
 ; start the initial seed node for the polyhedra
 to seed
- 
+
    ask one-of polygon with [nodes = Tcount] [set start 1 set color yellow ]
-  
+
 
 end
 
 to spread
-  
+
   ask polygon [layout-tutte polygon with [my-out-links = 2] links 10 ]
   ask polygon with [connected = 1] [repeat 150 [layout-spring polygon links tension tsize repulsion]]
 end
 
 to perturb
-  
- 
-  
-  
-  
-    
+
+
+
+
+
+
      ; Make nodes dynamic by making links elastic
      ;repeat 50 [layout-spring polygon with [closed = 1] links tension tsize repulsion]
-     
+
      ;repeat (((Tcount * polygons) - polygons) + 1) [layout-spring polygon with [closed = 1] links tension tsize repulsion]
-     
+
      ; ask polygon [layout-tutte ( polygon with [nodes = Tcount] ) links 10 ]
-      repeat 30 [layout-spring polygon with [nodes = Tcount] links tension tsize repulsion ] 
+      repeat 30 [layout-spring polygon with [nodes = Tcount] links tension tsize repulsion ]
      ; repeat 50 [ layout-tutte polygon links 10 ]
      ; layout-tutte ( turtles with [my-out-links = 2 ) links 10
      ; Perturb the nodes
      ;ask polygon [set roll random 360 set pitch random 360 set heading random (360 - 90) forward .1]
-  
+
 end
 
 
@@ -251,15 +251,15 @@ end
 to plane
 
 ; pick one polygon at a time
-; determine the best fit plane equation 
+; determine the best fit plane equation
 ; get a normal
-; Equation of plane is: 
+; Equation of plane is:
 
 
 
 
 
-; project the vertices onto the plane 
+; project the vertices onto the plane
 
 ; adjust the vertices to be equidistant
 
@@ -770,7 +770,7 @@ Polygon -7500403 true true 270 75 225 30 30 225 75 270
 Polygon -7500403 true true 30 75 75 30 270 225 225 270
 
 @#$#@#$#@
-NetLogo 3D 5.0.3
+NetLogo 3D 5.3.1
 @#$#@#$#@
 @#$#@#$#@
 @#$#@#$#@
@@ -778,9 +778,9 @@ NetLogo 3D 5.0.3
 @#$#@#$#@
 default
 0.0
--0.2 0 1.0 0.0
+-0.2 0 0.0 1.0
 0.0 1 1.0 0.0
-0.2 0 1.0 0.0
+0.2 0 0.0 1.0
 link direction
 true
 0

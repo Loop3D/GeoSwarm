@@ -1,4 +1,4 @@
-;Program:  SwarmDips.nlogo
+;Program:  Dip_Swarm_IAMG.nlogo
 ;
 ; Description: An application to demonstrate structural influence in an agent flocking context
 ;
@@ -731,10 +731,10 @@ to nest ;; Prototype and demo purpose only needs code optimization
    ; Need a more dynamic mechanism to have local cohesion.
 
 
-;;;;;;;;;;;;;;;;;;;                               WORKING HERE  JULY 11, 2018
 
 
-;;;  Need to get on-contact sims to rotate with far off-contact dip data
+
+;;;  Need to get on-contact sims to rotate with far off-contact dip data, update in later code GeoSwarm
 
 
 if (Demo = "Map 3D Geology") [
@@ -991,7 +991,7 @@ if (Demo = "Moving Plane with Dips") [
                 forward Motion
 
 
-                ; WORKING HERE JUNE 10, 2019
+
                 ; Update moving sim with dip of nearest DIP DATA in SLERP way
                 ; Sense the local Dip Data and adjust to it by rotating toward it
                 let dip-data data with [(did = 501) AND (dtype = 5) AND ((distancexyz-nowrap [xcor] of myself [ycor] of myself [zcor] of myself) < vision)]
@@ -2744,7 +2744,7 @@ CHOOSER
 Demo
 Demo
 "Simple Plane" "Moving Plane with Dips" "Migrate to On-Contact Data"
-0
+2
 
 INPUTBOX
 22
@@ -2752,7 +2752,7 @@ INPUTBOX
 111
 344
 On_Contacts
-1.0
+10.0
 1
 0
 Number
@@ -2763,7 +2763,7 @@ INPUTBOX
 210
 346
 Dips
-2.0
+20.0
 1
 0
 Number
@@ -2797,7 +2797,7 @@ Strike
 Strike
 0
 360
-0.0
+138.0
 1
 1
 NIL
@@ -2812,7 +2812,7 @@ Dip
 Dip
 0
 90
-0.0
+78.0
 1
 1
 NIL
@@ -2859,7 +2859,7 @@ Tolerance
 Tolerance
 0
 180
-3.0
+15.0
 1
 1
 NIL
@@ -2874,7 +2874,7 @@ variability
 variability
 0
 1
-1.0
+0.71
 .01
 1
 NIL
@@ -2886,7 +2886,7 @@ INPUTBOX
 371
 348
 SwarmSize
-100.0
+25.0
 1
 0
 Number
@@ -2900,7 +2900,7 @@ max-turn
 max-turn
 0
 180
-76.0
+25.0
 1
 1
 Degrees
@@ -2915,7 +2915,7 @@ vision
 vision
 0
 100
-67.0
+100.0
 1
 1
 Distance
@@ -2930,7 +2930,7 @@ separation
 separation
 0
 20
-8.25
+10.0
 .25
 1
 Distance
@@ -2945,7 +2945,7 @@ simsize
 simsize
 .1
 2.5
-0.38
+0.96
 .01
 1
 NIL
@@ -2960,7 +2960,7 @@ Motion
 Motion
 0
 1
-0.22
+0.01
 .01
 1
 NIL
@@ -2993,7 +2993,7 @@ residual
 residual
 0.01
 10
-0.51
+0.91
 .1
 1
 NIL
@@ -3013,39 +3013,37 @@ Buffer
 @#$#@#$#@
 ## WHAT IS IT?
 
-(a general understanding of what the model is trying to show or explain)
+An application to demonstrate structural influence in an agent flocking context
 
 ## HOW IT WORKS
-
-(what rules the agents use to create the overall behavior of the model)
+See GeoSwarm for more details
 
 ## HOW TO USE IT
 
-(how to use the model, including a description of each of the items in the Interface tab)
+See GeoSwarm for more details
 
 ## THINGS TO NOTICE
 
-(suggested things for the user to notice while running the model)
+See GeoSwarm for more details
 
 ## THINGS TO TRY
+See GeoSwarm for more details
 
-(suggested things for the user to try to do (move sliders, switches, etc.) with the model)
 
 ## EXTENDING THE MODEL
+See GeoSwarm for more details
 
-(suggested things to add or change in the Code tab to make the model more complicated, detailed, accurate, etc.)
 
 ## NETLOGO FEATURES
-
-(interesting or unusual features of NetLogo that the model uses, particularly in the Code tab; or where workarounds were needed for missing features)
+See GeoSwarm for more details
 
 ## RELATED MODELS
+See GeoSwarm for more details
 
-(models in the NetLogo Models Library and elsewhere which are of related interest)
 
 ## CREDITS AND REFERENCES
 
-(a reference to the model's URL on the web if it has one, as well as any other necessary credits, citations, and links)
+See GeoSwarm for more details
 @#$#@#$#@
 default
 true
