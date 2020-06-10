@@ -707,7 +707,6 @@ end
 
 
 
-
 @#$#@#$#@
 GRAPHICS-WINDOW
 0
@@ -777,7 +776,7 @@ Trend
 Trend
 0
 360
-360.0
+0.0
 1
 1
 NIL
@@ -792,7 +791,7 @@ Plunge
 Plunge
 -90
 90
-15.0
+0.0
 1
 1
 NIL
@@ -807,7 +806,7 @@ Strike
 Strike
 0
 360
-0.0
+85.0
 1
 1
 NIL
@@ -822,7 +821,7 @@ Dip
 Dip
 0
 90
-18.0
+0.0
 1
 1
 NIL
@@ -848,7 +847,7 @@ Rotation
 Rotation
 -1000
 1000
-340.0
+89.0
 1
 1
 NIL
@@ -907,44 +906,81 @@ CHOOSER
 Demo
 Demo
 "Horizontal Line" "Horizontal Radials"
-1
+0
 
 @#$#@#$#@
-## WHAT IS IT?
+## Rotate
 
-A simple slider based interface to rotate planar field observations
+A simple slider based interface to rotate a single planar field observation about a user defined axis. 
 
 ## HOW IT WORKS
 
-(what rules the agents use to create the overall behavior of the model)
+Uses linear spherical interpolation SLERP with quaternion rotations for dips rotated about a user defined rotation axis. 
 
 ## HOW TO USE IT
 
-(how to use the model, including a description of each of the items in the Interface tab)
+setup = Initialize the model with the data and symbolize.
+
+Simulate = Start the rotation simulation.
+
+Strike = Main orientation observation at centre of model. Angle in the horizontal plane between North (0 or 360 degrees) and the direction of a line on that plane, defined by an intersection with the horizontal plane and the surface beeing measured, as one faces so the surface dips down to ones right. This implementation obeys the right hand rule. 
+
+Dip = The maximum angle in a verticle plane between the surface and the horizontal.
+
+Overturned = True/False for changing polarity of dip agents.
+
+Rotation = slider to select degrees +/- of rotation (spin) around axis of rotation.
+
+Rotation axis represented by a green stick with a green ball on each end. It is controlled by Trend and Plunge.
+
+Trend = 0-360 linear structural element defined by azimuthal angle in degrees of the horizontal, between north (0 or 360 degrees) and the verticle projection to the horizontal. Used for the structural rotation axis.
+
+Plunge = 0-90 maximum angle between linear element and a horizontal plane defining the linear structural rotation axis.
+
+Demo = Horizontal Line, Horizontal Radials
+
+ShowData = (True/False) Display the constraint data if available.
+
 
 ## THINGS TO NOTICE
 
-(suggested things for the user to notice while running the model)
+See how twisting the linear stack of dips with the rotation slider occurs in a smooth consistent fashion. Note how, with different rotation axis, quite variable dip changes can occur.
+
+Try flipping the polarity to see how rotation is behaving. Does polarity direction change the influence of rotation in any way?
 
 ## THINGS TO TRY
 
-(suggested things for the user to try to do (move sliders, switches, etc.) with the model)
+Slow down the model calculation, with the viewer tick speed setting. The red ball is localizing where the next calculation is being solved. Try changing the path of this agent to follow a simple traverse line or a grid on a specified plane. 
+
+Show how differences in orientation angles are important for creating the greatest variability in structure. What happens when the rotation axis is 90 degrees to the planar orientation of the main controler? Can you rotate when the dip is horizontal? Could this be accomplished without the use of Quaternions?
+
 
 ## EXTENDING THE MODEL
 
-(suggested things to add or change in the Code tab to make the model more complicated, detailed, accurate, etc.)
+Add a slider for changing the symbol sizes.
+
+Add more rays to determine that all directional instances have been tested for the quaternion rotation. 
+
+Will a verticle dip along a verticle distribution rotated about a verticle axis produce a change in strike? 
+
+Does the data distribution matter when interpolating in this way?
 
 ## NETLOGO FEATURES
 
-(interesting or unusual features of NetLogo that the model uses, particularly in the Code tab; or where workarounds were needed for missing features)
+Extensive use of the Matrix and array extension for Quaternion use. Quick Matrix solver is useful for calculating Eigen values and vectors as well as the rotation matrix for transforming forward and backward from cartesian to quaternion spaces. 
 
 ## RELATED MODELS
 
-(models in the NetLogo Models Library and elsewhere which are of related interest)
+See GeoSwarm for full implementation.
 
 ## CREDITS AND REFERENCES
 
-(a reference to the model's URL on the web if it has one, as well as any other necessary credits, citations, and links)
+
+Code developed by Eric A. de Kemp, Geological Survey of Canada, Ottawa, 2016
+
+De Paor, Declan G., 1996, Structural Geology and Personal Computers - Computation of Orientations for GIS — the ‘Roll’ of Quaternions,  Computer Methods in the Geosciences 1996 Volume: 15   Issue: c   Page: 447-456
+
+De Paor, D.G., 1995. Quaternions, raster shears, and the modeling of rotations in structural and tectonic studies, Proceedings and abstracts: Geological Society of America 27 (6), p.72, 1995 annual meeting, New Orleans, LA, United Statespoint. Nov. 6-9, 1995
 @#$#@#$#@
 default
 true

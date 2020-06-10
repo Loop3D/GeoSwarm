@@ -1,27 +1,27 @@
 extensions [array]
 
-; Program: Single_Triangle_EdK_3d
+; Program: Poly
 ; Created by : Eric de Kemp
 ; Date: Jan 8, 2013
 ; Modified : January 13, 2013 17:05
 
-; File: Single_Triangle_EdK_3d.NLogo
+; File: Poly.NLogo
 ;
 ; Description: A 3D spatial agent set
 ;
-; Notes:   For showing triangle movement behavior
+; Notes:   For showing triangle and other polyhedra behavior
 ;
 
 
 ; Set up global variables
-globals [x y z Tcount edgesize lcounter status active_group]
+globals [x y z Tcount edgesize lcounter status active_group active-agent meshsize connectednodes]
 ;set up Agents
 breed [polygon node]
 directed-link-breed [edges edge]
 undirected-link-breed [red-links red-link]
 
 ; Set up agent owned variables
-polygon-own [nodes start closed friends closest-friend farthest-friend connected ]   ; nodes = number of sides, closed 1 - closed (2 links on a node)
+polygon-own [nodes start closed friends closest-friend farthest-friend connected ]   ; nodes = Poly-ID, closed 1 - closed (2 links on a node)
 
 
 ; Set up the environment
@@ -42,7 +42,10 @@ to setup  ; an observer based setup
   set Tcount 0
   set edgesize 1
   set lcounter 0
-  set active_group 0
+  set active-agent nobody
+  set active_group nobody
+  set meshsize 0
+  set connectednodes 0
  end
 
 
@@ -56,45 +59,19 @@ to go
   connect
   ;spread
   set Tcount 0
+
+  ;spread polygon tension tsize repulsion
+  set Tcount 0
   while [ticks <= iterations ]
       [
 
       set Tcount Tcount + 1
-      ask polygon [perturb]
 
+      perturb polygon tension tsize repulsion
+        if (ticks = iterations) [ reset-ticks ]
       tick
        ]
   stop
-end
-
-
-;Demonstrate agent group to group connections
-to connect
-
-set Tcount 0
-while [Tcount < polygons]  [
-  set Tcount Tcount + 1  ; polygon ID
-                         ; Select a polygon near the centre of the model and identify a member of that group
-  ifelse Tcount = 1 [ask polygon [set closest-friend min-one-of polygon [distancexyz 0 0 0] ]
-                       ask polygon [ask closest-friend [set color red set active_group nodes]]]
-
-                        ; find the nearest node of ANOTHER polygon and color it blue
-                      [if any? polygon with [nodes != active_group and connected = 0] [ask polygon with [color = red] [set closest-friend min-one-of polygon with [nodes != active_group and connected = 0] [distance myself]]]
-                       ask polygon with [color = red] [ask closest-friend [set color blue]]
-
-; connect the two and reposition the red-blue pairs
-ask polygon with [color = red] [create-link-to one-of polygon with [color = blue]]
-ask polygon with [color = red or color = blue] [set connected 1]
-ask polygon with [connected = 1] [repeat 50 [layout-spring polygon links tension tsize repulsion]]
-ask polygon with [color = blue] [set active_group nodes]
-ask polygon with [color = blue] [set closest-friend max-one-of polygon with [nodes = active_group] [distance myself]]
-ask polygon [ask closest-friend [set color red ]]
-; repeat untill all polygons are connected at least once
-
-
-]
-]
-
 end
 
 
@@ -104,6 +81,8 @@ to make_polygons
  ; Force polygons to stay on the plane
  ; not implimented yet
 
+
+
    set x random-xcor
    set y random-ycor
    set z random-zcor
@@ -111,8 +90,12 @@ to make_polygons
    set Tcount Tcount + 1  ; polygon ID
 
    create-polygon sides [ hide-turtle set shape "dot" set nodes Tcount set start 0 set closed 0 set connected  0 setxyz x y z set size 1  set color (15 + (Tcount * 10))
-                          set roll random 360 set pitch random 360 set heading random (360 - 90) forward 1 show-turtle]
-   perturb
+                          set roll random 360 set pitch random 360 set heading random (360 - 90) forward 1 show-turtle
+                          set meshsize meshsize + 1
+                          mesh-update
+                          ]
+
+   perturb polygon tension tsize repulsion
 
 
    seed
@@ -120,8 +103,9 @@ to make_polygons
 
    ;check if there is still an unlinked node
    while [any? polygon with [closed = 0]] [
-     perturb
+     perturb polygon tension tsize repulsion
      ask polygon with [nodes = Tcount] [
+
 
 
              ; start the initial link from the seed
@@ -131,13 +115,16 @@ to make_polygons
                    set closest-friend min-one-of polygon with [ start = 0 and nodes = Tcount and count my-in-links = 0 and count my-in-links = 0] [distance myself]
                    set farthest-friend max-one-of polygon with [ start = 0 and nodes = Tcount and count my-in-links = 0 and count my-in-links = 0] [distance myself]
                    ;create-link-to farthest-friend  ]
-                   create-link-to closest-friend ]
+                   create-link-to closest-friend
+                   set connectednodes connectednodes + 1
+                   mesh-update
                  ]
 
+               ]
 
 
              ;continue down the chain...
-             perturb
+             perturb polygon tension tsize repulsion
              if any? polygon with [nodes = Tcount and start = 0 and count my-out-links = 0 and count my-in-links = 1 and closed = 0]
                [
 
@@ -148,11 +135,14 @@ to make_polygons
                            set closest-friend min-one-of polygon with [nodes = Tcount and start = 0 and count my-out-links = 0 and count my-in-links = 0 and closed = 0] [distance myself]
                            set farthest-friend max-one-of polygon with [nodes = Tcount and start = 0 and count my-out-links = 0 and count my-in-links = 0 and closed = 0] [distance myself]
                            create-link-to closest-friend
+                           set connectednodes connectednodes + 1
+                           mesh-update
                            ;create-link-to farthest-friend
                            ; create-link-to one-of other polygon with [ nodes = Tcount and start = 0 and count my-in-links = 0 and count my-out-links = 0]
                             ask polygon with [count my-out-links = 0 and count my-in-links = 1] [set color yellow set size 2]
 
-                            set closed 1 set color green set size 1]
+                            set closed 1 set color green set size 1
+                            ]
 
                  ]
 
@@ -165,8 +155,9 @@ to make_polygons
                        ask polygon with [ nodes = Tcount and start = 0 and count my-out-links = 0 and count my-in-links = 1 and closed = 0 ]
                            [create-link-to one-of other polygon with [ nodes = Tcount and start = 1 and count my-in-links = 0 and count my-out-links = 1]
                            set closed 1
-
-                            ask polygon with [color = yellow] [ set color green set size 1 ]
+                           set connectednodes connectednodes + 1
+                           mesh-update
+                           ask polygon with [color = yellow] [ set color green set size 1 ]
 
                             ask polygon with [ nodes = Tcount and start = 1] [set closed 1 set color white]
 
@@ -209,6 +200,97 @@ to make_polygons
 
 end
 
+
+;Demonstrate agent group to group connections
+to connect
+
+set Tcount 0
+let poly-pool nobody
+while [Tcount < polygons]  [
+
+
+
+  set Tcount Tcount + 1  ; polygon ID
+                         ; Select a polygon near the centre of the model and identify a member of that group
+  ifelse ( Tcount = 1) [
+                     ; Define the closest-friend as the node closest to centre
+                       let Central-Poly polygon with [nodes = 1]
+                       ask Central-Poly [set active-agent min-one-of Central-Poly [distancexyz 0 0 0] ]
+                       ask active-agent [set color red set active_group polygon with [nodes = Tcount] ]]
+
+
+
+                        ; find the nearest node of ANOTHER polygon and color it blue
+                      [
+
+                        if (any? polygon with [ connected = 0])
+
+      [  set poly-pool polygon with  [ connected = 0 and nodes != [nodes]  of active-agent]
+
+
+
+
+
+                               ask polygon with [color = red] [ set closest-friend min-one-of poly-pool with [connected = 0] [distance myself]]
+
+
+
+                             ]
+
+      if (any? polygon with [color = red]) [ask polygon with [color = red] [ask closest-friend [set color blue]]]
+
+; connect the two and reposition the red-blue pairs
+
+ask polygon with [color = red] [
+        create-link-to one-of polygon with [color = blue][set color red]
+                                ; set the entire source polygon to connected status
+                                ask active_group [set connected 1]
+                                set connectednodes connectednodes + 1
+                                mesh-update
+
+                               ]
+set active-agent one-of polygon with [color = blue]
+ask active-agent [set connected 1 ]
+ask active-agent [repeat 50 [layout-spring polygon links tension tsize repulsion]]
+ask polygon with [color = red and connected = 1] [set color yellow]
+      let a [nodes] of active-agent
+set active_group polygon with [nodes = a ]
+
+ask active-agent [set closest-friend max-one-of active_group with [connected = 0] [distance active-agent]]
+ask active-agent [ask closest-friend [set color red ] set color yellow]
+
+;type "Polygons : " type [nodes] of polygon type " " type [connected] of polygon type "\n"
+;type "Active polygon : " type [nodes] of active_group type " " type [connected] of polygon type "\n"
+; type "Remaining polys : " type  [nodes] of poly-pool type " " type [connected] of polygon type "\n"
+
+
+
+; Polygons are doing multi-connections
+; repeat untill all polygons are connected at least once
+
+
+]
+
+]
+
+;spread polygon tension tsize repulsion
+
+end
+
+; Show an active plot of the mesh parameters
+to mesh-update
+
+  set-current-plot "Mesh Size"
+  set-current-plot-pen "Nodes"
+  plot meshsize
+  set-current-plot-pen "Connections"
+  plot connectednodes
+
+
+end
+
+
+
 ; start the initial seed node for the polyhedra
 to seed
 
@@ -217,18 +299,15 @@ to seed
 
 end
 
-to spread
+
+
+to spread [spread-agentset stension stsize srepulsion]
 
   ask polygon [layout-tutte polygon with [my-out-links = 2] links 10 ]
-  ask polygon with [connected = 1] [repeat 150 [layout-spring polygon links tension tsize repulsion]]
+  ask polygon with [connected = 1] [repeat 150 [layout-spring spread-agentset links stension stsize srepulsion]]
 end
 
-to perturb
-
-
-
-
-
+to perturb [shake-agentset ptension ptsize prepulsion]
 
      ; Make nodes dynamic by making links elastic
      ;repeat 50 [layout-spring polygon with [closed = 1] links tension tsize repulsion]
@@ -236,11 +315,12 @@ to perturb
      ;repeat (((Tcount * polygons) - polygons) + 1) [layout-spring polygon with [closed = 1] links tension tsize repulsion]
 
      ; ask polygon [layout-tutte ( polygon with [nodes = Tcount] ) links 10 ]
-      repeat 30 [layout-spring polygon with [nodes = Tcount] links tension tsize repulsion ]
+     ; repeat 30 [layout-spring shake-agentset with [nodes <= Tcount] links ptension ptsize prepulsion ]
+      layout-spring shake-agentset links ptension ptsize prepulsion
      ; repeat 50 [ layout-tutte polygon links 10 ]
-     ; layout-tutte ( turtles with [my-out-links = 2 ) links 10
+      ;layout-tutte ( turtles with [my-out-links = 2 ) links 10
      ; Perturb the nodes
-     ;ask polygon [set roll random 360 set pitch random 360 set heading random (360 - 90) forward .1]
+     ;ask polygon [set roll random 360 set pitch random 360 set heading random (360 - 90) forward .000001]
 
 end
 
@@ -273,8 +353,8 @@ GRAPHICS-WINDOW
 0
 439
 460
-16
-16
+-1
+-1
 13.0
 1
 10
@@ -315,10 +395,10 @@ NIL
 1
 
 TEXTBOX
-164
-18
-480
-44
+179
+15
+495
+41
 Surface Construction Prototype
 14
 0.0
@@ -342,41 +422,42 @@ NIL
 1
 
 INPUTBOX
-171
-45
-247
-105
+186
+42
+262
+102
 polygons
-2
+30.0
 1
 0
 Number
 
 PLOT
-404
-37
-604
-187
-Sniffers
-NIL
+394
+118
+594
+268
+Mesh Size
+Iterations
 Nodes
 0.0
 10.0
 0.0
 10.0
 true
-false
+true
 "" ""
 PENS
-"default" 1.0 0 -16777216 true "" "plot count sniffers"
+"Connections" 1.0 0 -2674135 true "" "connectednodes"
+"Nodes" 1.0 0 -14730904 true "" "meshsize"
 
 INPUTBOX
-268
+284
 42
-342
+358
 102
 sides
-10
+6.0
 1
 0
 Number
@@ -390,7 +471,7 @@ tsize
 tsize
 .1
 2
-0.5
+0.1
 .2
 1
 NIL
@@ -405,78 +486,87 @@ repulsion
 repulsion
 .1
 1
-0.1
+0.2
 .1
 1
 NIL
 HORIZONTAL
 
 SLIDER
-192
+190
 247
-364
+362
 280
 tension
 tension
 .1
 1
-0.4
+0.3
 .1
 1
 NIL
 HORIZONTAL
 
 SLIDER
-195
-309
-367
-342
+191
+305
+363
+338
 Iterations
 Iterations
 1
 1000
-26
+1000.0
 1
 1
 NIL
 HORIZONTAL
 
 @#$#@#$#@
-## WHAT IS IT?
+## Poly
 
-A simple triangulation routine
+A polygon generator with inter-polygon connectivity
 
 ## HOW IT WORKS
 
-(what rules the agents use to create the overall behavior of the model)
+Demonstrates simple polyhedral graphics control which is needed for vector based boundary representations used in many geological modeling environments. Construction agents can perform simple local tasks, such as making a single polyhedron but also regional tasks by joining these up until a stop criteria is reached.  Modeling of simple closed and connected polyhedra is achieved by joining simple triangles or large loops with many vertices. Each closed polyhedron once formed will connect one link to its adjacent polyhedron. Modeling and visualization of the network are controlled by user-defined edge size, search radius, repulsion and tension of the edges. 
 
 ## HOW TO USE IT
 
-(how to use the model, including a description of each of the items in the Interface tab)
+Set the number of polygons for example, to 20 and number of nodes per polygon with sides = 6 as a start. To terminate the program select Tools and Halt.
 
 ## THINGS TO NOTICE
 
-(suggested things for the user to notice while running the model)
+How do agents know how to connect to other agents? Here there is just a simple rule, don't connect to myself if I am already in the loop. So past activity and topological state changes can be monitored and used to adjust a model. 
 
 ## THINGS TO TRY
 
-(suggested things for the user to try to do (move sliders, switches, etc.) with the model)
+Slow down the speed slider in the 3D view window. Once launched slowly increase the speed to see how links are being made. Watch the node and link counter as the topology starts to change. 
+
+Try changing the tension, repulsion and size parameters to see how the overall shape of the object changes.  
+
+
 
 ## EXTENDING THE MODEL
 
-(suggested things to add or change in the Code tab to make the model more complicated, detailed, accurate, etc.)
+Try changing the code so the ends of the polygon chain are joined up in a big loop, instead of a single long chain. Could other topological complexity be added? Could agents be used to monitor and respond to apriori topologic knowledge? 
+
+Extend to volumetric objects, for example to make closed irregular meshes representing plutons. What kind of rules could be used to have these interacting in a geologic manner? How can dynamic links be used to model natural processes? 
+
+Try adding more topologic complexity and track these changes with graphs for things like node to edge ratios or metrics for lengths of edges and areas of polygons. What kind of shape parameters would be useful to model natural objects? 
 
 ## NETLOGO FEATURES
 
-(interesting or unusual features of NetLogo that the model uses, particularly in the Code tab; or where workarounds were needed for missing features)
+Network features for dynamic links were useful to provide cohesion of the connected model while it was deforming randomly. 
 
 ## RELATED MODELS
 
-(models in the NetLogo Models Library and elsewhere which are of related interest)
+Mesh is an extension of this code. 
+No Mesh or Poly code is used in GeoSwarm. 
 
 ## CREDITS AND REFERENCES
 
-(a reference to the model's URL on the web if it has one, as well as any other necessary credits, citations, and links)
+Code developed by Eric A. de Kemp, Geological Survey of Canada, Ottawa, 2013
 @#$#@#$#@
 default
 true
@@ -768,9 +858,8 @@ false
 0
 Polygon -7500403 true true 270 75 225 30 30 225 75 270
 Polygon -7500403 true true 30 75 75 30 270 225 225 270
-
 @#$#@#$#@
-NetLogo 3D 5.3.1
+NetLogo 3D 6.0.4
 @#$#@#$#@
 @#$#@#$#@
 @#$#@#$#@
@@ -786,7 +875,6 @@ true
 0
 Line -7500403 true 150 150 90 180
 Line -7500403 true 150 150 210 180
-
 @#$#@#$#@
 0
 @#$#@#$#@

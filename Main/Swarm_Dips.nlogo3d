@@ -1,4 +1,4 @@
-;Program:  Dip_Swarm_IAMG.nlogo
+;Program:  Swarm_Dips.nlogo
 ;
 ; Description: An application to demonstrate structural influence in an agent flocking context
 ;
@@ -736,7 +736,7 @@ to nest ;; Prototype and demo purpose only needs code optimization
 
 ;;;  Need to get on-contact sims to rotate with far off-contact dip data, update in later code GeoSwarm
 
-
+;Disabled
 if (Demo = "Map 3D Geology") [
 
 
@@ -893,7 +893,7 @@ if (Demo = "Moving Plane with Dips") [
                 ; The sims just adjust dips as they come close to the Data.
 
                 ; Paramiterize the distance to data with respect to vision distance
-                ; Beyond vission distance the Dip Data has no influence only regional dip has influence
+                ; Beyond vision distance the Dip Data has no influence only regional dip has influence
                 ; at residual distance we get maximum inluence of data. Dips are exact within the residual field of influence
 
                 ; Scale D2D so at residual t = 1 and at vision t = 0
@@ -1044,7 +1044,7 @@ if (Demo = "Moving Plane with Dips") [
 
 
 
-
+; Disabled
  if (Demo = "Variable Dips on Topography") [
 
    ; Fix this so we start with the data and check which sims are closest..... instead of the other way around!
@@ -2744,7 +2744,7 @@ CHOOSER
 Demo
 Demo
 "Simple Plane" "Moving Plane with Dips" "Migrate to On-Contact Data"
-2
+0
 
 INPUTBOX
 22
@@ -2812,7 +2812,7 @@ Dip
 Dip
 0
 90
-78.0
+9.0
 1
 1
 NIL
@@ -2900,7 +2900,7 @@ max-turn
 max-turn
 0
 180
-25.0
+0.0
 1
 1
 Degrees
@@ -2915,7 +2915,7 @@ vision
 vision
 0
 100
-100.0
+43.0
 1
 1
 Distance
@@ -2945,7 +2945,7 @@ simsize
 simsize
 .1
 2.5
-0.96
+0.79
 .01
 1
 NIL
@@ -2960,7 +2960,7 @@ Motion
 Motion
 0
 1
-0.01
+0.03
 .01
 1
 NIL
@@ -3011,39 +3011,119 @@ Buffer
 -1000
 
 @#$#@#$#@
-## WHAT IS IT?
+## Swarm Dip
 
-An application to demonstrate structural influence in an agent flocking context
+An application to demonstrate structural influence of observation data with an agent swarm that can represent spatial structural variability.  It demonstrates non-meshed swarm behavior of dip sim agents that respond to regional control, while maintaining local cohesion between neighbouring agents. There are some simple modes using local spatial data control points that this demo will use for dip or on contact estimation. It is simply to show swarming behavior, more in the context of global controls. It was used to test the algorithms used in GeoSwarm which does focus on the use of control data. 
+
 
 ## HOW IT WORKS
-See GeoSwarm for more details
+
+Based on the swarming approach for Boids presented originally by Craig Reynolds (1987) and implemented as a Netlogo code for demonstrating the flocking of birds or fish school behaviors (Wilensky 1998). The approach uses the three functions for Separation, Alignment and Cohesion to mimic these natural behaviors. These core functions are modified for structural geology data that has orientation properties, such as strike and dip and derived normal components. In addition these operations are enhanced with quaternion rotation function in three-dimensions, some more specific control for geometry detection, and the use of eigenvectors. The goal is not to make a migration path as in the flocking examples, so much as to have agents coalesce toward and adjust their orientations to control data or, separate and continue interrogating the model space. 
+
+See the program GeoSwarm for more details using a more mature version of the code base.
 
 ## HOW TO USE IT
 
-See GeoSwarm for more details
+There are 3 modes choosen from the mode list selector. 
+
+1. Simple Plane:
+
+Demonstrates convergence of a non-meshed swarm toward a common plane. Useful to demonstrate proximity, vision distance effects, angle of sight and separation.
+Dip sims are initially randomly distributed but slowly behave as a swarm, moving in the plane specified by the controller, respecting vision-proximity rules. When the separation and vision distance are low, the sims will converge and produce red balls alerting the user that a proximity threshold has been crossed. The red balls disappear once the sims move apart and the inter-sim distance is greater than the specified separation.
+
+ This mode uses a single main dip controlling agent, represented by a large origin (0,0,0) centred, two-sided (yellow up/green down) hexagon. The displayed data for on contact and stationary dip data have no influence. Only the the main controller, large green-yellow hexagon symbol that is stationary at the model centre with orientation (strike, dip, polarity) defined by the user, is influencing the swarm. The controlling parameters are adjusted dynamicaly during the simulation run, initiated by pushing first the setup, and then the Simulate buttons. Surrounding interrogation agents represented as smaller hexagons are dynamic, sensing agents and, are used to estimate or simulate, local structural vector fields, herein referred to as dip sims. Dip sims sense other dip sims within the vision distance and the view angle, they are kept from each other by a user defined separation distance (yellow circle). The user changes the configuration during a simulation with sliders on the Netlogo interface to control strike and dip properties of the Main Dip, which in turn controls the plane upon which agents are moving on. The smaller hexagons are estimation sims, interrogators that, migrate towards the main dip plane from an initial random state. The data in all the swarm examples are generated artificially by randomly positioned sites on the plane of the main controller. The orientation of each dip data point is set by random rotation perpendicular to the E1 (eigen) axis, to achieve a user specified variability (0 = no dip variance and 1 = maximum dip variance). The idea is that each agent can see other agents within a locally controlled environment such as a given vision distance and angle of sight, and these other agents start to coalesce forming a swarm, that could potentially have some task to complete such as extending a geologic feature of interest. A depositional horizon for example.
+
+
+2. Moving Plane with Dips:
+
+Demonstrates smooth linear interpolation using SLERP (Spherical Linear Rotation Interpolation) with quaternions. Parameterizes the rotation with linear segmentation of straight line distance to controlling dip data. As the dip sims come close to static dip data control points they will adjust their local orientation to match the orientation properties of the data, but do not move spatially towards these off-contact orientation observations. The influence of the orientation data on the estimation of orientation properties at the dip sim is weighted in an inverse distance manner. There is no migration to on contact data only the off contact dip data points have influence. Outside the vision distance, the main regional controller determines the agent orientation.
+
+
+
+3. Migrate to On contact Data:
+
+Demonstrates that sims can sense and migrate to on contact feature control points while detecting the structural influence from adjacent data. Dip sims move toward the nearest on contact data point while rotating into parallelism with the closest Dip observation. At a given tolerance to the on contact data points, the dip sim freezes in an orientation that is close to the neighbourhood dip field. When all on contact data points have a dip sim the rest of the Dip sims are behaving as a swarm only controlled by the Main controller and moving in the plane specified by the controller and vision-proximity rules. 
+ 
+
+
+Other user defined parameters include residual = threshold distance to which an agent will share exactly the same orientation properties as its neighbour. Tolerance = Acceptable local neighbour angle for normals. Agents outside this tolerance are killed. See a quick summary here;
+
+On-Contact = Number of on-contact observation points with no orientation.
+
+Dips = Number of off-contact dip data observation points.
+
+ShowData = Display the constraint data if available.
+
+Buffer = Distance from model walls to detect an agent for mirroring. 
+
+ShowSims = Display search agents.
+
+Overturned = True/False for changing polarity of dip agents.
+
+Motion = Distance incrementor for moving agents.
+
+simsize = Number of initialized agents.
+
+Vision = The maximum distance an agent can see a data point.
+
+separation = Mininmum distance maintained between swarm neighbours.
+
+max-turn = View angle from heading and pitch direction of swarm members to see neighbours.
+
+Swarm Size Graph that shows how many agents are in a swarm through model time steps.
+
+
+The Netlogo codes presented are freely available for download (See https://github.com/Loop3D/GeoSwarm.git).
 
 ## THINGS TO NOTICE
 
-See GeoSwarm for more details
+Notice what happens to the strike slider sensitivty at low dips. At dip = 0 strike is undefined. Some times agents appear to spin as they pass through the data field with mode = Migrate to on contact data. Why does this happen?  
+
+See GeoSwarm for more a developed version of the operations used herein and where customized data sets can be tested.
 
 ## THINGS TO TRY
-See GeoSwarm for more details
-
+It is interesting to investigate various agent behaviors that can be changed by altering the parameters for a) vision b) separation c) max-turn, etc.  
 
 ## EXTENDING THE MODEL
-See GeoSwarm for more details
+
+Try to develop more symbology for linear features with trend and plunge controlled with the spin() proceedure for quaternion rotation. How would plunge trajectories be used in modelling regional data?
+
+What rules should be in place for enhancing local cohesion? How would rules for surface development reflect some physical process such as gravity sliding or buckle-folding? 
+
+How would meshing be introduced into the program? 
+
+What would the rules be for dynamic intellegent meshing? 
+
+What geoscience knowledge would be important in performing a reasonable meshing?
+
+How would the rules change for modelling other common geological features such as 
+cylindrical folds, doubley plunging folds, faults, ore-bodys, single or multiple Intrusions? What shape parameters could be useful in these scenarios?
 
 
 ## NETLOGO FEATURES
-See GeoSwarm for more details
+
+See also the GeoSwarm program for more features and exaplanations.
 
 ## RELATED MODELS
-See GeoSwarm for more details
+
+Flocking
+Wave
+GeoSwarm
 
 
 ## CREDITS AND REFERENCES
 
-See GeoSwarm for more details
+Many thanks to Uri Wilensky, NetLogo team of developers and contributors who continue to enhance applications and extend the functionality of NetLogo with extensions to 3D, GIS, numerical functionality and other shared codes. Several examples such as wave and flocking codes have been the starting codes for this work presented here.
+
+De Paor, Declan G., 1996, Structural Geology and Personal Computers - Computation of Orientations for GIS — the ‘Roll’ of Quaternions,  Computer Methods in the Geosciences 1996 Volume: 15   Issue: c   Page: 447-456
+
+De Paor, D.G., 1995. Quaternions, raster shears, and the modeling of rotations in structural and tectonic studies, Proceedings and abstracts: Geological Society of America 27 (6), p.72, 1995 annual meeting, New Orleans, LA, United Statespoint. Nov. 6-9, 1995
+
+Reynolds C W (1987) Flocks, herds and schools: A distributed behavioral model. SIGGRAPH '87 Proceedings of the 14th annual conference on Computer graphics and interactive techniques, pp. 25-34 doi:10.1145/37401.37406 http://www.red3d.com/cwr/boids/.
+
+Wilensky U (1998) NetLogo Flocking model.  http://ccl.northwestern.edu/netlogo/models/Flocking,  Center for Connected Learning and Computer-Based Modeling, Northwestern University, Evanston, IL. 
+
+See GeoSwarm for more references.
 @#$#@#$#@
 default
 true

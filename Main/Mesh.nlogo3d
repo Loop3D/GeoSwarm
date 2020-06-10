@@ -1,7 +1,7 @@
 ;Program: Mesh
-;Created by: Sarah D'Ettorre
-;Modified by: Eric de Kemp
-;References: Mesh_April_2013 by Eric de Kemp
+;Initial development: Sarah D'Ettorre
+;Continued developed: Eric de Kemp
+;References:
 ;            Any references used for particular functions are listed in the
 ;            header for that function
 
@@ -275,7 +275,6 @@ if Num_Poly > 0
               ;Fill
 
 
-
           ]
 
         repeat 1 [SmoothBorder]
@@ -338,10 +337,6 @@ to-report tnode-check
    let error-code 0
    ask triangles  [
 
-
-         ;Check  for bad triangle node scheme
-
-         ;print "Checking tnodes ..."
 
 
          if (node1 = node2 or node1 = node3 or node2 = node3) [print "duplicate node"
@@ -683,12 +678,6 @@ to perturb
 
 
 
-   ;;;; WORKING HERE MARCH 3, 2014 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-
-
-
-
    if (any? Ons with [fit != 1] and all? triangles [shared_edges >= 0] ) [
 
 
@@ -738,7 +727,7 @@ to perturb
                if (closest-node != nobody and length [Poly_ID] of closest-node > 1 and closest-data != nobody) [
 
                                 ask active-mesh [
-                                         face closest-data
+                                         facexyz [xcor] of closest-data [ycor] of closest-data [zcor] of closest-data
                                          show-turtle
                                          set color red
                                          set proximity distancexyz-nowrap [xcor] of closest-data [ycor] of closest-data [zcor] of closest-data
@@ -818,7 +807,7 @@ end
 to move [target_triangles]
 
   let active-centre nobody ; the centre of an active triangle one being worked on
-  let pad .1     ; The proximity to wall criteria
+  let pad .001     ; The proximity to wall criteria
   let Alpha 0    ; direction cosines X
   let Beta 0     ; direction cosines Y
   let Gamma 0    ; direction cosines Y
@@ -950,7 +939,7 @@ to update
   while [tcount < Num_Poly ]
     [
 
-  ;;;;   WORKING HERE JAN 10, 2014 ... ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
 
   ;;; BUG with loading triangle node1, node2 ,....
   ;
@@ -1379,7 +1368,7 @@ ask local [
                set zcor zcor + delta_z
 
 
-print "Projecting ..."
+;print "Projecting ..."
                ]
 
     ]
@@ -1644,7 +1633,7 @@ to Fill
           if (root != nobody and a != nobody and b != nobody and a != b)
              [
 
-              print " Doing the Filling now ...."
+
 
              ; We assume a & b are neighbours joined at root
 
@@ -1655,7 +1644,7 @@ to Fill
              set free_nodes nodes with [item 0 Poly_ID = [PolyID_t] of one-of triangles with [shared_edges = 0]]  ;
 
              set free_root min-one-of free_nodes [distancexyz-nowrap [xcor] of root [ycor] of root [zcor] of root]
-             print "My happy free node is caught .." show free_root
+
 
 
 
@@ -1742,7 +1731,7 @@ to fuse [edge1 edge2]
   ; Must be adapted to handle fusing of adjacent free edges that share a common root node.
 
 
-  print "Fusing now ..."
+  ;print "Fusing now ..."
 
   ;identify the current non-meshed triangles other then the seed
   let ONMT triangles with [shared_edges = 0 and PolyID_t != [PolyID] of edge1 ]
@@ -1772,7 +1761,7 @@ to fuse [edge1 edge2]
     ask edge2 [set color orange]
   ;start moving the neighbour closer to the seed
 
-  print "ONMT   " show ONMT
+  ;print "ONMT   " show ONMT
 
     ;join the two edges so that the normals are poined in the same general direction
 
@@ -2515,7 +2504,7 @@ ask nodes with  [
 
 
              let count_traingles count triangles with [PolyID_t = [POLYID] of b]
-             print " Number of B - Triangles : " show count_traingles
+            ; print " Number of B - Triangles : " show count_traingles
 
 
 
@@ -2540,7 +2529,7 @@ ask nodes with  [
              ; display the a and b edges and their to & from ends
              let ab []
              set ab list a b
-             print "A & B :" show ab
+            ; print "A & B :" show ab
 
 
     ;STEP 4   HANGERS_TO
@@ -3114,8 +3103,8 @@ GRAPHICS-WINDOW
 0
 439
 460
-16
-16
+-1
+-1
 13.0
 1
 10
@@ -3178,7 +3167,7 @@ INPUTBOX
 276
 252
 Num_Poly
-50
+25.0
 1
 0
 Number
@@ -3207,7 +3196,7 @@ m1
 m1
 0.1
 3
-0.4
+0.5
 0.1
 1
 NIL
@@ -3222,7 +3211,7 @@ edge_size
 edge_size
 .01
 10
-2.21
+2.61
 .1
 1
 NIL
@@ -3278,7 +3267,7 @@ repulsion
 repulsion
 0
 1
-0.1
+0.2
 0.1
 1
 NIL
@@ -3318,7 +3307,7 @@ INPUTBOX
 385
 252
 On_Surface
-2
+3.0
 1
 0
 Number
@@ -3378,28 +3367,64 @@ search_radius
 search_radius
 0
 50
-4
+50.0
 1
 1
 NIL
 HORIZONTAL
 
 @#$#@#$#@
-## WHAT IS IT?
+## Mesh
 
-(a general understanding of what the model is trying to show or explain)
+A demonstration of 3D meshing from agents without a grid. For example, without having to sample a scalar field value in a partitioned grid (i.e. with marching cube). That a meshes could be grown locally and conform to data. Precursor requirement to intelligent meshes which would be shaped by the data, data quality, data density. Example of unconstrained triangulated surface construction using spatial agents. Note that the growth of the surface occurs with simple geological rules, namely parts of surface should not self-intersect, must maintain consistent polarity, and avoid for this test only, large tear faults. These surfaces can be made to move toward data constraints exactly or with tolerance.  Triangle: shared edges: shared vertices ratios can be used to check topology stopping criteria when doing agent-based meshing
 
-## HOW IT WORKS
+## HOW IT WORKS 
 
-(what rules the agents use to create the overall behavior of the model)
+Modeling of topologic surfaces that minimally are defined by a triangulated mesh that is direction and polarity sensitive. Each triangle has a normal that is maintained from the barycentre of the triangle. Triangle vertices have a mass that can be changed by the user to show the migration of the barycentre. A seed triangle senses the nearest neighbour triangle vertex and attracts it to itself. The incoming triangle is rotated to be conformable to the evolving surface patch and connected keeping the normal pointing in the same way thus maintaining simple surface topology. Simple topology metrics (edge: vertices: triangles ratios) are reported and plotted on the GUI graph.   
+With the on contact constraints active the mesh once constructed, that is no free triangles remaining, will migrate its regional barycentre to the nearest on-surface control point and turn it blue from white, then go on to do the same for the next control point. 
+
 
 ## HOW TO USE IT
 
-(how to use the model, including a description of each of the items in the Interface tab)
+Setup = To initialize the parmeters and crrate the agents.
+Launch = Initiates a continuous program run.
+Stop = Terminates the program. 
+
+
+labels = Turns on agent ID tags. 
+mesh = Turns on meshing capability for triangles only, when sides = 3.
+search_radius = Distance for detecting on surface data by triangle Barycentres.
+
+Num_Poly = Number of polyhedra shapes.
+
+On_Surface = Number of on contact points with no orientation.
+
+sides = Number of sides for each polygon. 
+
+
+m0 = mass of one of the polyhedra nodes.
+m1 = mass of a second one of the polyhedra nodes.
+m2 = mass of a third one of the polyhedra nodes.
+
+
+
+edge_size = Length of side edge.
+
+repulsion = Force pushing nodes of a mesh away.
+tension = Pulling force drawing meshed nodes together.
+
+
+Topology = Simple index from ratio of number of triangles to joiuned edges of a meshed object.
+Dist2Data = Reprot of node agents closest to data (On_Surface points) distance. 
+
+Command Centre shows a stream of coments and agent ids as the meshing progresses
+
+
+
 
 ## THINGS TO NOTICE
 
-(suggested things for the user to notice while running the model)
+At the end of the meshing the meshed object will move toward the 
 
 ## THINGS TO TRY
 
@@ -3725,9 +3750,8 @@ false
 0
 Polygon -7500403 true true 270 75 225 30 30 225 75 270
 Polygon -7500403 true true 30 75 75 30 270 225 225 270
-
 @#$#@#$#@
-NetLogo 3D 5.3.1
+NetLogo 3D 6.0.4
 @#$#@#$#@
 @#$#@#$#@
 @#$#@#$#@
@@ -3743,7 +3767,6 @@ true
 0
 Line -7500403 true 150 150 90 180
 Line -7500403 true 150 150 210 180
-
 @#$#@#$#@
 0
 @#$#@#$#@
