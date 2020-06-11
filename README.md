@@ -8,7 +8,7 @@ Developed by Eric A. de deKemp
 Geological Survey of Canada
 Ottawa, Ontario, Canada
 
-June 8, 2020
+June 11, 2020
 
 This repository is developed to help distribute GeoSwarm Netlogo codes for those wanting to demo, test, enhance and
 explore the potential uses of Spatial Agent Based approaches to the modelling of sparse structural geology data for
@@ -19,28 +19,27 @@ These are also viewable in the embedded gifs of the power point presentation in 
 also in the Docs folder, made at the International Association of Mathematical Geoscientists annual meeting in Penn State,
 Pensilvania, USA in August 2019.
 
-Importantly each NetLogo file has its own Netlogo version compatibility level. This is due to the long history of
- devleopment of the codes and adaptions of existing older codes from others such as Wave_IAMG.nlogo (1996) to
- Dip_Swarm_IAMG.nlogo (2019). Below is a list of codes and the version levels located in GeoSwarm/Main/.
+The NetLogo program files used in this project have been upgraded to Netlogo 3D v. 6.0.4. Older codes  such as Wave.nlogo (1996) have been
+included for reference and demonstration purposes.  Below is a list of codes and the current version level located in GeoSwarm/Main/.
 
-NetLogo(NL) Code              Version             Description of Simulation (Sim)
+NetLogo(NL) Code         Version             Description of Simulation (Sim)
 
-      _____                   _______                ______________   
+    _____              _______                ______________   
 
 
-GeoSwarm.nlogo3d					  NL-3D 6.0.4        Structural agent demo for modelling simple data configurations
+GeoSwarm.nlogo3d			NL-3D 6.0.4      Structural agent demo for modelling simple data configurations
 
-Dip_Swarm_IAMG.nlogo3d			NL-3D 6.0.4        Simulation with planar (strike/dip) observations
+Dip_Swarm.nlogo3d			NL-3D 6.0.4      Simulation with planar (strike/dip) observations
 
-Rotate_IAMG.nlogo3d					NL-3D 6.0.4        Simulation of quaternion rotations
+Rotate.nlogo3d				NL-3D 6.0.4      Simulation of quaternion rotations
 
-Trace_IAMG.nlogo3d					NL-3D 6.0.4        Simulation of vector fabric field
+Trace.nlogo3d					NL-3D 6.0.4      Simulation of vector fabric field
 
-Mesh_IAMG.NetLogo3d         NL-3D 5.3.1        Simulation of vector meshing
+Mesh.NetLogo3d				NL-3D 6.0.4      Simulation of vector meshing
 
-Polyhedra_IAMG.NetLogo3d    NL-3D 5.3.1        Simulation of simple hierarchical objects
+Polyhedra.NetLogo3d		NL-3D 6.0.4      Simulation of simple hierarchical objects
 
-Wave_IAMG.nlogo3d           NL-3D 4.1.3        Simulation of physical surface modelling
+Wave.nlogo3d			    NL-3D 6.0.4      Simulation of physical surface modelling
 
 
 Many thanks to Uri Wilensky, NetLogo team of developers and contributors who continue to enhance applications and extend the functionality of NetLogo with extensions to 3D, GIS, numerical functionality and other shared codes. Several examples such as wave and flocking codes have been the starting codes for this work presented here. Many thanks to Sarah D'Ettorre (2013) who initiated the first agent meshing codes now incorporated into Mesh_IAMG.NetLogo3d. Thanks also to Doron Nussbaum, Carleton University, School of Computer Science who provided supervision of Sarah D'Ettorre while working on her MSc. Thanks to Mike Hiller and Boyan Brodaric (GSC), for valuable feedback. Early consultation on AI methods from Éric Beaudry, (Université du Québec a Montréal), Khalid Djado and Mathieu Bouyrie (Kinna Technologies) is appreciated. Thanks to all the LOOP 3D team https://loop3d.org/ especially Mark Jessell and Laurent Ailleres for their patience and support of the project. Thanks to RING https://www.ring-team.org/ for academic support for use of Gocad/SKUA software and to Guilaume Caumon of who provided critical feedback for the research.
