@@ -706,7 +706,6 @@ end
 
 
 
-
 @#$#@#$#@
 GRAPHICS-WINDOW
 0
@@ -913,6 +912,14 @@ Demo
 
 A simple slider based interface to rotate a single planar field observation about a user defined axis. 
 
+Developed in NetLogo 3D 6.0.4
+
+Eric A. de Kemp PhD
+Geological Survey of Canada
+
+June 11, 2020
+Ottawa, Canada
+
 ## HOW IT WORKS
 
 Uses linear spherical interpolation SLERP with quaternion rotations for dips rotated about a user defined rotation axis. 
@@ -975,8 +982,21 @@ See GeoSwarm for full implementation.
 
 ## CREDITS AND REFERENCES
 
+Interested individuals who wish to further this research please contact; 
 
-Code developed by Eric A. de Kemp, Geological Survey of Canada, Ottawa, 2016
+Eric A. de Kemp
+Geological Survey of Canada, three-dimensional Earth Imaging and Modelling Lab 
+601 Booth Street, Ottawa, Canada, K0E 1E9
+E-mail:  eric.dekemp@canada.ca
+https://orcid.org/0000-0003-0347-5792
+
+
+Project Sites:
+
+https://github.com/Loop3D/GeoSwarm.git
+
+https://loop3d.org/ 
+
 
 De Paor, Declan G., 1996, Structural Geology and Personal Computers - Computation of Orientations for GIS — the ‘Roll’ of Quaternions,  Computer Methods in the Geosciences 1996 Volume: 15   Issue: c   Page: 447-456
 

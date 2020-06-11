@@ -1,5 +1,5 @@
 ;Program: Mesh
-;Initial development: Sarah D'Ettorre
+;Initial development: Jan 25, 2013 Sarah D'Ettorre Carleton University
 ;Continued developed: Eric de Kemp
 ;References:
 ;            Any references used for particular functions are listed in the
@@ -3376,12 +3376,20 @@ HORIZONTAL
 @#$#@#$#@
 ## Mesh
 
-A demonstration of 3D meshing from agents without a grid. For example, without having to sample a scalar field value in a partitioned grid (i.e. with marching cube). That a meshes could be grown locally and conform to data. Precursor requirement to intelligent meshes which would be shaped by the data, data quality, data density. Example of unconstrained triangulated surface construction using spatial agents. Note that the growth of the surface occurs with simple geological rules, namely parts of surface should not self-intersect, must maintain consistent polarity, and avoid for this test only, large tear faults. These surfaces can be made to move toward data constraints exactly or with tolerance.  Triangle: shared edges: shared vertices ratios can be used to check topology stopping criteria when doing agent-based meshing
+A demonstration of 3D meshing from agents without a grid. For example, without having to sample a scalar field value in a partitioned grid (i.e. with marching cubes). That a mesh could be grown locally and conform to data.  Example of unconstrained triangulated surface construction using spatial agents. This function of meshing is a precursor requirement to intelligent meshes which would be shaped for example, by a variety of spatial and property data, data quality and  data density values. Note that the growth of the surface occurs with simple geological rules, namely parts of surface should not self-intersect, must maintain consistent polarity, and avoid for this test only, large tear faults. These surfaces can be made to move toward data constraints exactly, or with tolerance.  Triangle : shared edges: shared vertices ratios can be used to check topology stoping criteria when doing agent-based meshing.
+
+Developed in NetLogo 3D 6.0.4
+
+Eric A. de Kemp PhD
+Geological Survey of Canada
+
+June 11, 2020
+Ottawa, Canada
 
 ## HOW IT WORKS 
 
 Modeling of topologic surfaces that minimally are defined by a triangulated mesh that is direction and polarity sensitive. Each triangle has a normal that is maintained from the barycentre of the triangle. Triangle vertices have a mass that can be changed by the user to show the migration of the barycentre. A seed triangle senses the nearest neighbour triangle vertex and attracts it to itself. The incoming triangle is rotated to be conformable to the evolving surface patch and connected keeping the normal pointing in the same way thus maintaining simple surface topology. Simple topology metrics (edge: vertices: triangles ratios) are reported and plotted on the GUI graph.   
-With the on contact constraints active the mesh once constructed, that is no free triangles remaining, will migrate its regional barycentre to the nearest on-surface control point and turn it blue from white, then go on to do the same for the next control point. 
+With the on contact constraints active, the mesh once constructed, that is no free triangles remaining, will migrate its regional barycentre to the nearest on-surface control point and turn it blue from white, then go on to do the same for the next control point. 
 
 
 ## HOW TO USE IT
@@ -3401,18 +3409,14 @@ On_Surface = Number of on contact points with no orientation.
 
 sides = Number of sides for each polygon. 
 
-
 m0 = mass of one of the polyhedra nodes.
 m1 = mass of a second one of the polyhedra nodes.
 m2 = mass of a third one of the polyhedra nodes.
-
-
 
 edge_size = Length of side edge.
 
 repulsion = Force pushing nodes of a mesh away.
 tension = Pulling force drawing meshed nodes together.
-
 
 Topology = Simple index from ratio of number of triangles to joiuned edges of a meshed object.
 Dist2Data = Reprot of node agents closest to data (On_Surface points) distance. 
@@ -3421,30 +3425,59 @@ Command Centre shows a stream of coments and agent ids as the meshing progresses
 
 
 
-
 ## THINGS TO NOTICE
 
-At the end of the meshing the meshed object will move toward the 
+At the end of the meshing the meshed object will move toward the white balls representing on contact data points. Once the completed mesh touches a point it will turn blue and the mesh will move on. 
 
 ## THINGS TO TRY
 
-(suggested things for the user to try to do (move sliders, switches, etc.) with the model)
+Try controling the form of the mesh by changing the tension and repulsion, as well as edge_size parameters. Compare by using the WaveMachine3D model (Wilensky 1996), included in the demo program set. Set up a simple mesh with 6 triangles. Move the Barycentre of triangle, the red stick ball at the middle of the triangle, by changing the mass of individual vertices. See how the geometry of an object can be altered with physical properties. 
 
 ## EXTENDING THE MODEL
 
-(suggested things to add or change in the Code tab to make the model more complicated, detailed, accurate, etc.)
+Try to fix a bug that causes the mesh to be trapped against the wall of the model. 
+
+Try to ensure that all data points change to blue at the end of the meshing. 
+
+What new rules or properties could be introduced to make a smarter more geological meshing? 
+
+What is the purpose of the mesh in modelling? Try to make a point representation of a surface, without using a mesh, like a flat swarm of bees. Why is this difficult to achieve? 
+
+What are the issues in meshing with sparse data AND complex models? 
+
+What knowledge would be useful to control how these scenarios are modelled with smart meshes? Try making a simple demo using elipsoidal meshes that produces a variable range of object sizes based on a range of input values for geometric properties for example, major axis sizes and orientations, mesh densities and polyhedral levels (triangles, hexahedrals etc.)
+
 
 ## NETLOGO FEATURES
 
-(interesting or unusual features of NetLogo that the model uses, particularly in the Code tab; or where workarounds were needed for missing features)
+Property dislay for vsariables siuch as topology and distance to data meterics in a moving scalable plot is a useful feature. This could be useful when introducing more complex learing codes with model error minimization functions.
 
 ## RELATED MODELS
 
-(models in the NetLogo Models Library and elsewhere which are of related interest)
+WaveMachine3D
 
 ## CREDITS AND REFERENCES
 
-(a reference to the model's URL on the web if it has one, as well as any other necessary credits, citations, and links)
+Interested individuals who wish to further this research please contact; 
+
+Eric A. de Kemp
+Geological Survey of Canada, three-dimensional Earth Imaging and Modelling Lab 
+601 Booth Street, Ottawa, Canada, K0E 1E9
+E-mail:  eric.dekemp@canada.ca
+https://orcid.org/0000-0003-0347-5792
+
+
+Project Sites:
+
+https://github.com/Loop3D/GeoSwarm.git
+
+https://loop3d.org/ 
+
+NetLogo. http://ccl.northwestern.edu/netlogo/. Center for Connected Learning and Computer-Based Modeling, Northwestern University, Evanston, IL.
+
+Wilensky, U. (1996). NetLogo Wave Machine 3D model. http://ccl.northwestern.edu/netlogo/models/WaveMachine3D. Center for Connected Learning and Computer-Based Modeling, Northwestern University, Evanston, IL. - Wilensky, U. (1999). 
+
+
 @#$#@#$#@
 default
 true

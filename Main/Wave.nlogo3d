@@ -1,3 +1,6 @@
+
+; Upgraded to Netlogo 3D 6.0.4 edeKemp June 11, 2020
+
 globals [
   membrane-edge-x  ;; horizontal distance from center to edge of membrane
   membrane-edge-y  ;; vertical distance from center to edge of membrane
@@ -14,7 +17,11 @@ turtles-own [
 ]
 
 to setup
-  ca
+  ;; (for this model to work with NetLogo's new plotting features,
+  ;; __clear-all-and-reset-ticks should be replaced with clear-all at
+  ;; the beginning of your setup procedure and reset-ticks at the end
+  ;; of the procedure.)
+  __clear-all-and-reset-ticks
   set membrane-edge-x floor (max-pxcor / 1.5 )
   set membrane-edge-y floor (max-pycor / 1.5 )
   set-default-shape turtles "circle"
@@ -74,10 +81,10 @@ end
 GRAPHICS-WINDOW
 0
 0
-227
+245
 248
-15
-15
+-1
+-1
 7.0
 1
 10
@@ -98,6 +105,7 @@ GRAPHICS-WINDOW
 1
 1
 ticks
+30.0
 
 BUTTON
 70
@@ -114,6 +122,7 @@ NIL
 NIL
 NIL
 NIL
+1
 
 BUTTON
 151
@@ -130,6 +139,7 @@ NIL
 NIL
 NIL
 NIL
+1
 
 SLIDER
 10
@@ -140,7 +150,7 @@ stiffness
 stiffness
 0.0
 50
-7
+7.0
 1.0
 1
 NIL
@@ -155,7 +165,7 @@ driver-x
 driver-x
 -11
 11
-0
+0.0
 1
 1
 NIL
@@ -170,7 +180,7 @@ driver-y
 driver-y
 -11
 11
-0
+0.0
 1
 1
 NIL
@@ -185,7 +195,7 @@ driver-size
 driver-size
 0
 10
-0
+0.0
 1
 1
 NIL
@@ -200,7 +210,7 @@ driver-amplitude
 driver-amplitude
 0.0
 30.0
-30
+30.0
 1.0
 1
 NIL
@@ -215,7 +225,7 @@ driver-frequency
 driver-frequency
 0.0
 100.0
-6
+6.0
 1.0
 1
 NIL
@@ -230,7 +240,7 @@ friction
 friction
 0.0
 99.0
-0
+0.0
 1.0
 1
 NIL
@@ -257,13 +267,12 @@ Driver settings
 0
 
 @#$#@#$#@
-WHAT IS IT?
------------
-This is a 3D version of the 2D model Wave Machine. This model simulates wave motion in a membrane. The four edges of the membrane are fixed to a frame. A green rectangular area represents a driver plate that moves up and down, exhibiting sinusoidal motion.
+## WHAT IS IT?
 
+This is a 3D version of the 2D model Wave Machine. This model simulates wave motion in a membrane. The four edges of the membrane are fixed to a frame. A red ball at the centre represents a driver that moves up and down, exhibiting sinusoidal motion.
 
-HOW TO USE IT
--------------
+## HOW TO USE IT
+
 Controls of membrane properties:
 
 The FRICTION slider controls the amount of friction or attenuation in the membrane. The STIFFNESS slider controls the force exerted on a turtle by a unit deflection difference between the turtle and its four neighbors.
@@ -274,27 +283,24 @@ The DRIVER-FREQUENCY slider controls the frequency at which the green area of th
 
 The DRIVER-X and DRIVER-Y sliders control the position of the driver. The DRIVER-SIZE slider controls the size of the driver.
 
+## THINGS TO NOTICE
 
-THINGS TO NOTICE
-----------------
 The membrane is made up of lines of turtles. Each turtle acts as it were connected to its four neighboring turtles by springs. In this model, turtles move only up and down -- the force's direction IS only up and down. The greater the distance between a turtle and its neighbors, the stronger the force.
 
 When the green turtles move up, they "pull up" the turtles which are their neighbors, which in turn pull up the turtles which are their neighbors, and so on. In that way, a wave moves along the membrane. When the wave reaches the edges of the membrane (the blue turtles), the wave is reflected back to the center of the membrane.
 
 The amplitude of the green turtles is fixed regardless of the stiffness of the membrane. However, moving a stiff membrane requires a lot more force to move it the same amount as an unstiff membrane. So even as the stiffness of the membrane is increased, the wave height will remain the same because the amplitude is kept the same.
 
+## THINGS TO TRY
 
-THINGS TO TRY
--------------
 Try different membranes. Soft membranes have smaller stiffness values and hard membranes have larger stiffness values.
 
 Try different driving forces, or try changing the frequency or amplitude. It is very interesting to change the size and the position of the driving force to see symmetrical and asymmetrical wave motions.
 
 Try to create a "standing wave," in which some points in the membrane do not move at all.
 
+## EXTENDING THE MODEL
 
-EXTENDING THE MODEL
--------------------
 In this model, the movement of the turtles is only in the vertical direction, perpendicular to the membrane. Modify the model such that the movement is within the membrane plane, i.e. the x-y plane.
 
 You can also try to add additional driving forces to make a multi-input membrane model. Another thing you can try is to apply different waveforms to the driving-force to see how the membrane reacts to different inputs. Try changing the overall shape of the driving force.
@@ -303,21 +309,18 @@ Try to build a solid model, that is, a model of waveforms within all three dimen
 
 Instead of using amplitude to create the wave, change it to apply a fixed amount of force continuously.
 
+## NETLOGO FEATURES
 
-NETLOGO FEATURES
-----------------
 Note the use of the TURTLES-ON reporter to find turtles on neighboring patches.
 
 A key step in developing this model was to create an internal coordinate system. X, Y, and Z are just three turtles-own variables. You can imagine that turtles are situated in and move around in 3-space.  But to display the turtles on the screen, which is two-dimensional, the turtle's three coordinates must be mapped into two.
 
+## CREDITS AND REFERENCES
 
-CREDITS AND REFERENCES
-----------------------
 Thanks to Weiguo Yang for his help with this model.
 
+## HOW TO CITE
 
-HOW TO CITE
------------
 If you mention this model in an academic publication, we ask that you include these citations for the model itself and for the NetLogo software:
 - Wilensky, U. (1996).  NetLogo Wave Machine 3D model.  http://ccl.northwestern.edu/netlogo/models/WaveMachine3D.  Center for Connected Learning and Computer-Based Modeling, Northwestern University, Evanston, IL.
 - Wilensky, U. (1999). NetLogo. http://ccl.northwestern.edu/netlogo/. Center for Connected Learning and Computer-Based Modeling, Northwestern University, Evanston, IL.
@@ -325,9 +328,8 @@ If you mention this model in an academic publication, we ask that you include th
 In other publications, please use:
 - Copyright 1996 Uri Wilensky. All rights reserved. See http://ccl.northwestern.edu/netlogo/models/WaveMachine3D for terms of use.
 
+## COPYRIGHT NOTICE
 
-COPYRIGHT NOTICE
-----------------
 Copyright 1996 Uri Wilensky. All rights reserved.
 
 Permission to use, modify or redistribute this model is hereby granted, provided that both of the following requirements are followed:
@@ -337,7 +339,6 @@ b) this model will not be redistributed for profit without permission from Uri W
 This is a 3D version of the 2D model Wave Machine.
 
 This model was created as part of the projects: PARTICIPATORY SIMULATIONS: NETWORK-BASED DESIGN FOR SYSTEMS LEARNING IN CLASSROOMS and/or INTEGRATED SIMULATION AND MODELING ENVIRONMENT. The project gratefully acknowledges the support of the National Science Foundation (REPP & ROLE programs) -- grant numbers REC #9814682 and REC-0126227.
-
 @#$#@#$#@
 default
 true
@@ -617,9 +618,8 @@ false
 0
 Polygon -7500403 true true 270 75 225 30 30 225 75 270
 Polygon -7500403 true true 30 75 75 30 270 225 225 270
-
 @#$#@#$#@
-NetLogo 3D 4.1.3
+NetLogo 3D 6.0.4
 @#$#@#$#@
 setup
 setxyz -2 -30 3
@@ -639,7 +639,6 @@ true
 0
 Line -7500403 true 150 150 90 180
 Line -7500403 true 150 150 210 180
-
 @#$#@#$#@
 0
 @#$#@#$#@

@@ -3015,6 +3015,13 @@ Buffer
 
 An application to demonstrate structural influence of observation data with an agent swarm that can represent spatial structural variability.  It demonstrates non-meshed swarm behavior of dip sim agents that respond to regional control, while maintaining local cohesion between neighbouring agents. There are some simple modes using local spatial data control points that this demo will use for dip or on contact estimation. It is simply to show swarming behavior, more in the context of global controls. It was used to test the algorithms used in GeoSwarm which does focus on the use of control data. 
 
+Developed in NetLogo 3D 6.0.4
+
+Eric A. de Kemp PhD
+Geological Survey of Canada
+
+June 11, 2020
+Ottawa, Canada
 
 ## HOW IT WORKS
 
@@ -3114,6 +3121,21 @@ GeoSwarm
 ## CREDITS AND REFERENCES
 
 Many thanks to Uri Wilensky, NetLogo team of developers and contributors who continue to enhance applications and extend the functionality of NetLogo with extensions to 3D, GIS, numerical functionality and other shared codes. Several examples such as wave and flocking codes have been the starting codes for this work presented here.
+
+Interested individuals who wish to further this research please contact; 
+
+Eric A. de Kemp
+Geological Survey of Canada, three-dimensional Earth Imaging and Modelling Lab 
+601 Booth Street, Ottawa, Canada, K0E 1E9
+E-mail:  eric.dekemp@canada.ca
+https://orcid.org/0000-0003-0347-5792
+
+
+Project Sites:
+
+https://github.com/Loop3D/GeoSwarm.git
+
+https://loop3d.org/ 
 
 De Paor, Declan G., 1996, Structural Geology and Personal Computers - Computation of Orientations for GIS — the ‘Roll’ of Quaternions,  Computer Methods in the Geosciences 1996 Volume: 15   Issue: c   Page: 447-456
 

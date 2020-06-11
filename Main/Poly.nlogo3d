@@ -525,7 +525,15 @@ HORIZONTAL
 @#$#@#$#@
 ## Poly
 
-A polygon generator with inter-polygon connectivity
+A polygon generator with inter-polygon connectivity.
+
+Developed in NetLogo 3D 6.0.4
+
+Eric A. de Kemp PhD
+Geological Survey of Canada
+
+June 11, 2020
+Ottawa, Canada
 
 ## HOW IT WORKS
 
@@ -566,7 +574,27 @@ No Mesh or Poly code is used in GeoSwarm.
 
 ## CREDITS AND REFERENCES
 
+Interested individuals who wish to further this research please contact; 
+
+Eric A. de Kemp
+Geological Survey of Canada, three-dimensional Earth Imaging and Modelling Lab 
+601 Booth Street, Ottawa, Canada, K0E 1E9
+E-mail:  eric.dekemp@canada.ca
+https://orcid.org/0000-0003-0347-5792
+
+
+Project Sites:
+
+https://github.com/Loop3D/GeoSwarm.git
+
+https://loop3d.org/ 
+https://www.ring-team.org/
+https://www.pdgm.com/products/skua-gocad/
+
 Code developed by Eric A. de Kemp, Geological Survey of Canada, Ottawa, 2013
+
+Wilensky U (1999) NetLogo. http://ccl.northwestern.edu/netlogo, Center for Connected Learning and Computer-Based Modeling, Northwestern University, Evanston, IL. NetLogo Home page: http://ccl.northwestern.edu/netlogo/
+
 @#$#@#$#@
 default
 true

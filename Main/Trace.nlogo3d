@@ -1,13 +1,14 @@
 ;Program: Trace_IAMG.nlogo
-;Created by: Eric A. de Kemp   January 3, 2017
+;Created by: Eric A. de Kemp  Geological Survey of Canada, January 3, 2017
 ;Modifications
+;   Upgraed to Netlogo 3D 6.0.4 June 11, 2020
 ;   Curvature triming for user specified curve conditions April 23, 2019
-;   Interpolation method added for IDW Eric de Kemp  January 3, 2017
+;   Interpolation method added for IDW Eric de Kemp  January 3, 2017  (In menu only, not completed)
 ;   Distance calculations reject out-of world agents
 ;
 ;
 ;References:
-;            See original code from Erics Models_2013\Observation_Trace_3D.nlogo.nlogo3d
+;
 ;            3D form line construction by structural field interpolation (SFI) of geologic strike and dip observations,
 ;            Mike Hillier, Eric deKemp and Ernst Schetselaar, Journal of Structural Geology 51 (2013) p. 167-179.
 ;            Any references used for particular functions are listed in the
@@ -19,7 +20,7 @@
 ; 1) Set any sliders or input buttons as desired.
 ;    *** for a nice demo, use the following parameters:
 ;
-;        Paths 1
+;        seeds 1
 ;        Scouts 1
 ;        target 1000
 ;        observations 5
@@ -228,7 +229,8 @@ to sniff
   ]
 
   ; if not then do a nearest neighbour search for observational data and grab the geometric properties
-
+  ;
+  ; IDW not implemented
 
 end
 
@@ -704,7 +706,7 @@ strike
 strike
 0
 360
-90.0
+45.0
 1
 1
 NIL
@@ -719,7 +721,7 @@ dip
 dip
 0
 90
-78.0
+46.0
 1
 1
 NIL
@@ -734,7 +736,7 @@ variability
 variability
 0
 1
-0.6
+0.5
 .1
 1
 NIL
@@ -811,7 +813,7 @@ Length_Scale
 Length_Scale
 0
 100
-13.0
+6.0
 1
 1
 NIL
@@ -826,7 +828,7 @@ Density
 Density
 0
 100
-6.0
+9.0
 1
 1
 NIL
@@ -841,7 +843,7 @@ Max_Length
 Max_Length
 0
 1000
-213.0
+503.0
 1
 1
 NIL
@@ -856,7 +858,7 @@ Curvature
 Curvature
 0
 1
-0.01
+0.12
 .01
 1
 NIL
@@ -940,20 +942,28 @@ NIL
 1
 
 @#$#@#$#@
-## WHAT IS IT?
+## Trace
 
-A simple agent based dip and down dip trace demo. Similar to Structural Field Interpolation (SFI). Modelling of geological Fabric observations. Essentially a 3D form trace model. 
+A simple agent based dip and down dip trace demo. Modelling of geological fabric observations. Essentially a 3D form trace model. 
+
+Developed in NetLogo 3D 6.0.4
+
+Eric A. de Kemp PhD
+Geological Survey of Canada
+
+June 11, 2020
+Ottawa, Canada
 
 ## HOW IT WORKS
 
-The search agent (red sphere) travels through the model space randomly until it senses a proximal dip observation. It will then adjust its trajectory towards a down dip vector to this observation and spawn other simulated dip points that are nearest neighbour (NN) or inverse distance weighted (IDW) interpolations from the data. A stream of points is recorded as the search agent moves through the model space. This point stream will form de Casteljau – Bézier (Farin 1997) curves that are either killed or preserved based on simple user specified shape parameters.
+The search agent (red sphere) travels through the model space randomly until it senses a proximal dip observation. It will then adjust its trajectory towards a down dip vector to this observation and spawn other simulated dip points that are nearest neighbour (NN) interpolations from the data. A stream of points is recorded as the search agent moves through the model space. This point stream will form de Casteljau – Bézier (Farin 1997) curves that are either killed or preserved based on simple user specified shape parameters.
 
 ## HOW TO USE IT
 
-Set any sliders or input buttons as desired.
-    for a simple demo, use the following parameters:
+Set any sliders or input buttons as desired however for
+a simple demo, use the following parameters:
 
-        Paths 1
+        Seeds 5
         Scouts 1
         target 1000
         observations 5
@@ -967,26 +977,92 @@ Set any sliders or input buttons as desired.
         variability .5
 
  2) Select the "Setup" button.
- 3) Select the "Launch" button.
- 4) When ready for the simulation to end, select the "Stop" button.
+ 3) Select the "Go" button.
+ 4) Change the control sliders to see the effects on develping a trace pattern.
+ 5) To stop the simulation before the target number of iterations, push the "Reset" button.
+
+Interface Control Variables:
+
+Setup = Initialize the data configuration.
+go = Start the simaultion.
+Reset - Kill all trace results but keep intermediate simualted dips (small green tablets).
+
+observations = Number of random input planar observations. Yellow tablets. Long axis is the strike. 
+
+
+seeds = number of local near data estimators (smaller green tablest).
+scouts = number of searchers generating traces (red spheres)
+target = number of iterations in a run.
+
+Method:
+	Nearest Neighbour 
+	IDW (Inverse Distance Weighted)
+
+Trace control rules:
+
+Max_Length = Maximum internal length of trace curve
+smoothness = Changes the curvature trajectory of the trace.
+Length_Scale = Trace segment length.
+Density = Number of points per trace.
+Curvature = not implemented
+
+Estimated Points = number of grip frame nodes used in the curve.
+Node_Labels = turns on node IDs of Trace.
+
+counter = Number of new trace nodes.
+NewEstimates = Number of retained trace nodes.
+
+strike = Input planar orientation element (0 - 360). 
+dip = Input planar oreientation element (0 - 90).
+
+Monitors:
+
+Orientation 
+	
+	Strike = Simulated strike values  Black 
+	Dip  = Simulated dip values       Red 
+
+Proximity 
+
+        Distance of trace nodes to input data. 
+
+Trace Curvature 
+
+	Not implemented
+
 
 ## THINGS TO NOTICE
 
-This section could give some ideas of things for the user to notice while running the model.
+See how with multiple runs the stream lines can produce different solutions that fit the data. 
+
 
 ## THINGS TO TRY
 
-Increase the variabilty slider to get more complex trajectories. Turn off and on estimated points to show results of local NN or IDW estimates used by the scouts.
+Increase the variabilty slider to get more complex trajectories. Turn off and on estimated points to show results of local estimates used by the scouts.
+
+Try to produce straight traces through a more variable dip field and curved traces through a flat homogenous structural field. 
+
+What rules would be most useful to improve the traces?
+
+How would topologic ribbons be produced from this model? 
+
+What new symbolization would be needed?
+
+What added complexity would on contact constraints bring to the model? How would these be estimated with this agent approach?
+
 
 ## EXTENDING THE MODEL
 
  Development needed :
 
- IDW not implemented yet ...implemented in other programs.
- Extend Bezier - de Casteljau algorith to respect last end point of streamline for    curvature based shape limits.
- Make possible freezing input data configuration and running other simulations....
- Implement topology so input has tops and estimation has tops and simualtion respects      tops, not implemented.
- Need new vector graphics for tops. Not implmented.
+A more elaborate interpolator could be used such as IDW and SLERP for quaternion rotations. This was implemented in Rotate and GeoSwarm. Try using those codes to update this Trace model. Add these interpolation methods to the Method slider. 
+
+Extend Bezier - de Casteljau algorith to respect last end point of streamline for       curvature based shape limits.
+
+The trace curvature monitor and the slider to control the degree of curvature needs to be implemented so that the shape of final traces can be controled with curvature rules. A curvature threshold could be set for example that eliminates curves that are overly smooth or not smooth enough.  
+
+Try to exetnd the model to include the polarity or way up for depositional oreientation data related to horizons or younging directions in general. This would need vector graphics for tops. Not implmented at the time of Trace. Available in GeoSwarm with another symbol library 3d_HexShape.txt.
+
 
 ## NETLOGO FEATURES
 
@@ -994,14 +1070,32 @@ Needed new glyphs for struyctural graphics. Use the associated shape files. Here
 
 ## RELATED MODELS
 
-Rotate
+Rotate and GeoSwarm
 
 ## CREDITS AND REFERENCES
 
 References:
-            See original code from Erics Models_2013\Observation_Trace_3D.nlogo.nlogo3d
-            3D form line construction by structural field interpolation (SFI) of geologic             strike and dip observations,
-            Mike Hillier, Eric deKemp and Ernst Schetselaar, Journal of Structural                    Geology 51 (2013) p. 167-179.
+            
+Interested individuals who wish to further this research please contact; 
+
+Eric A. de Kemp
+Geological Survey of Canada, three-dimensional Earth Imaging and Modelling Lab 
+601 Booth Street, Ottawa, Canada, K0E 1E9
+E-mail:  eric.dekemp@canada.ca
+https://orcid.org/0000-0003-0347-5792
+
+
+Project Sites:
+
+https://github.com/Loop3D/GeoSwarm.git
+
+https://loop3d.org/ 
+
+3D form line construction by structural field interpolation (SFI) of geologic             strike and dip observations, Mike Hillier, Eric deKemp and Ernst Schetselaar, Journal of Structural Geology 51 (2013) p. 167-179.
+
+Farin G (1997) Curves and Surfaces for Computer Aided Geometric Design. (4th edition), Academic Press, San Diego, California. ISBN-13: 9780444511041Farin G (1997) Curves and Surfaces for Computer Aided Geometric Design. (4th edition), Academic Press, San Diego, California. ISBN-13: 9780444511041
+
+
             Any references used for particular functions are listed in the
             header for that function.
 @#$#@#$#@

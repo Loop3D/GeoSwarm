@@ -4,7 +4,9 @@
 ;
 ; Author: Eric A. de Kemp - GSC, Ottawa, Canada, 2020
 ;
-; Date:   June 8,  2020  Attraction behavior adjusted to bring agents better to the data.
+; Date:
+;         June 11, 2020 A1-4 file input for ascii files, export to gocad/skua, scaling.
+;         June 8,  2020 Attraction behavior adjusted to bring agents better to the data.
 ;         May  22, 2020 Membrian Option included updated file input settings such as topology = 0 (On-Surface)
 ;         Dec.  1, 2019 Established Swarming with surface cohesion through orientation convergence
 ;         Nov. 30, 2019 Convergence and isometric cohesion done, many bug fixes, nested neighbourhood cohesion abandoned
@@ -468,11 +470,6 @@ to load-data
    ;; This re-opens the file, so we can use it.
 
    file-open in-file
-
-
-
-
-
 
   let DM matrix:make-constant l 6 0
   set l 0
@@ -3450,14 +3447,17 @@ Test-File
 0
 
 @#$#@#$#@
-## WHAT IS GeoSwarm?
+## GeoSwarm
 
 A demonstration of particle agents for modelling geological structures.
 Several data files are used as test scenarios representing simple 2 to 4 point data sets taken from opposing steep dipping fold limbs. 
 
 Developed in NetLogo 3D 6.0.4
 
-June 8, 2020
+Eric A. de Kemp PhD
+Geological Survey of Canada
+
+June 11, 2020
 Ottawa, Canada
 
 ## HOW IT WORKS
@@ -3560,6 +3560,8 @@ Flocking, WaveMachine3D
 
 ## CREDITS AND REFERENCES
 
+Many thanks to Uri Wilensky, NetLogo team of developers and contributors who continue to enhance applications and extend the functionality of NetLogo with extensions to 3D, GIS, numerical functionality and other shared codes. Several examples such as wave and flocking codes have been the starting codes for this work presented here.
+
 Interested individuals who wish to further this research please contact; 
 
 Eric A. de Kemp
@@ -3567,7 +3569,6 @@ Geological Survey of Canada, three-dimensional Earth Imaging and Modelling Lab
 601 Booth Street, Ottawa, Canada, K0E 1E9
 E-mail:  eric.dekemp@canada.ca
 https://orcid.org/0000-0003-0347-5792
-
 
 Project Sites:
 
@@ -3592,8 +3593,6 @@ Wilensky U (1996) NetLogo Wave Machine 3D model. http://ccl.northwestern.edu/net
 Wilensky U (1999) NetLogo. http://ccl.northwestern.edu/netlogo, Center for Connected Learning and Computer-Based Modeling, Northwestern University, Evanston, IL. NetLogo Home page: http://ccl.northwestern.edu/netlogo/
 
 Woodcock N H (1977) Specification of Fabric Shapes using an eigenvalue method. Geological Society of America Bulletin 88:1231-1236 
-
-
 @#$#@#$#@
 default
 true
